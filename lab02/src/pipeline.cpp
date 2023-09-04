@@ -117,7 +117,7 @@ void pipe_print_state(Pipeline *p) {
 			case 2:
 				printf("\t EX: ");
 				break;
-			case 4:
+			case 3:
 				printf("\t MA: ");
 				break;
 			default:
@@ -221,15 +221,174 @@ void pipe_cycle_EX(Pipeline *p) {
 
 void pipe_cycle_ID(Pipeline *p) {
 	// TODO: UPDATE HERE (Part A, B)
-	int ii;
 
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
+	// USED LATER for SUPERSCALAR
+	bool pipeline_stalled = false;
+	uint64_t oldest_id_stalled = 0;
+
+	bool src1_dep = false;
+	bool src2_dep = false;
+	bool src3_dep = false;
+	bool cc_dep = false;
+	Op_Type src1_dep_op_type = (Op_Type)0;
+	Op_Type src2_dep_op_type = (Op_Type)0;
+	Op_Type src3_dep_op_type = (Op_Type)0;
+	Op_Type cc_dep_op_type = (Op_Type)0;
+	uint64_t src1_dep_op_id = 0;
+	uint64_t src2_dep_op_id = 0;
+	uint64_t src3_dep_op_id = 0;
+	uint64_t cc_dep_op_id = 0;
+	Latch_Type src1_dep_latch = (Latch_Type)0;
+	Latch_Type src2_dep_latch = (Latch_Type)0;
+	Latch_Type src3_dep_latch = (Latch_Type)0;
+	Latch_Type cc_dep_latch = (Latch_Type)0;
+
+	// First copy each incoming instruction into all ID latches
+	// So we can check accross pipeline lanes for dep later
+	for ( int32_t lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		p->pipe_latch[ID_LATCH][lane] = p->pipe_latch[IF_LATCH][lane];
+		// clear any previous stalls, will be set again if needed
+		p->pipe_latch[IF_LATCH][lane].stall = false;
+	}
+
+	for ( int32_t ii = 0; ii < PIPE_WIDTH; ii++ ) {
+
+		// Copy potential next instruction from previous latch
 		p->pipe_latch[ID_LATCH][ii] = p->pipe_latch[IF_LATCH][ii];
+		Pipeline_Latch &this_inst = p->pipe_latch[ID_LATCH][ii];
+		Pipeline_Latch &ex_inst = p->pipe_latch[EX_LATCH][ii];
+		Pipeline_Latch &ma_inst = p->pipe_latch[MA_LATCH][ii];
 
-		if ( ENABLE_MEM_FWD ) {
+		// Skip all checks for this lane if latch is "empy" (bubble)
+		if ( !this_inst.valid ) {
+			continue;
 		}
 
-		if ( ENABLE_EXE_FWD ) {
+		/* CHECK EX_LATCH for Dependencies*/
+		if ( ex_inst.valid ) {                    // invalid instructions are "bubbles"
+			if ( ex_inst.tr_entry.dest_needed ) { // set if the instruction writes to destination
+				// RAW dep between src1 reg and EX_LATCH dest
+				if ( this_inst.tr_entry.src1_needed &&
+				     this_inst.tr_entry.src1_reg == ex_inst.tr_entry.dest ) {
+					// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
+					// Means largest op_id
+					src1_dep = true;
+					src1_dep_latch = EX_LATCH;
+					src1_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+					src1_dep_op_id = ex_inst.op_id;
+				}
+
+				// RAW dep between src2 reg and EX_LATCH dest
+				if ( this_inst.tr_entry.src2_needed &&
+				     this_inst.tr_entry.src2_reg == ex_inst.tr_entry.dest ) {
+					src2_dep = true;
+					src2_dep_latch = EX_LATCH;
+					src2_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+					src2_dep_op_id = ex_inst.op_id;
+				}
+
+				// RAW dep between src3 reg and EX_LATCH dest
+				if ( this_inst.tr_entry.src3_needed &&
+				     this_inst.tr_entry.src3_reg == ex_inst.tr_entry.dest ) {
+					src3_dep = true;
+					src3_dep_latch = EX_LATCH;
+					src3_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+					src3_dep_op_id = ex_inst.op_id;
+				}
+			}
+			// RAW dep between CC reg and EX_LATCH CC write
+			if ( ex_inst.tr_entry.cc_write &&
+			     this_inst.tr_entry.cc_read ) {
+				cc_dep = true;
+				cc_dep_latch = EX_LATCH;
+				cc_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+				cc_dep_op_id = ex_inst.op_id;
+			}
+		}
+		/* CHECK MA_LATCH for Dependencies*/
+		if ( ma_inst.valid ) {                    // invalid instructions are "bubbles"
+			if ( ma_inst.tr_entry.dest_needed ) { // set if the instruction writes to destination
+				// RAW dep between src1 reg and MA_LATCH dest
+				if ( this_inst.tr_entry.src1_needed &&
+				     this_inst.tr_entry.src1_reg == ma_inst.tr_entry.dest ) {
+					// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
+					// Means largest op_id
+					src1_dep = true;
+					src1_dep_latch = MA_LATCH;
+					src1_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+					src1_dep_op_id = ma_inst.op_id;
+				}
+
+				// RAW dep between src2 reg and MA_LATCH dest
+				if ( this_inst.tr_entry.src2_needed &&
+				     this_inst.tr_entry.src2_reg == ma_inst.tr_entry.dest ) {
+					src2_dep = true;
+					src2_dep_latch = MA_LATCH;
+					src2_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+					src2_dep_op_id = ma_inst.op_id;
+				}
+
+				// RAW dep between src3 reg and MA_LATCH dest
+				if ( this_inst.tr_entry.src3_needed &&
+				     this_inst.tr_entry.src3_reg == ma_inst.tr_entry.dest ) {
+					src3_dep = true;
+					src3_dep_latch = MA_LATCH;
+					src3_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+					src3_dep_op_id = ma_inst.op_id;
+				}
+			}
+			// RAW dep between CC reg and MA_LATCH CC write
+			if ( ma_inst.tr_entry.cc_write &&
+			     this_inst.tr_entry.cc_read ) {
+				cc_dep = true;
+				cc_dep_latch = MA_LATCH;
+				cc_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+				cc_dep_op_id = ma_inst.op_id;
+			}
+		}
+
+		// Determine if stalling is necessary, or if we can forward
+		bool src1_dep_causes_stall = false;
+		bool src2_dep_causes_stall = false;
+		bool src3_dep_causes_stall = false;
+		bool cc_dep_causes_stall = false;
+
+		if ( src1_dep ) {
+			if ( src1_dep_latch == EX_LATCH ) {
+				src1_dep_causes_stall = !ENABLE_EXE_FWD;
+			} else if ( src1_dep_latch == MA_LATCH ) {
+				src1_dep_causes_stall = !ENABLE_MEM_FWD;
+			}
+		}
+		if ( src2_dep ) {
+			if ( src2_dep_latch == EX_LATCH ) {
+				src2_dep_causes_stall = !ENABLE_EXE_FWD;
+			} else if ( src2_dep_latch == MA_LATCH ) {
+				src2_dep_causes_stall = !ENABLE_MEM_FWD;
+			}
+		}
+		if ( src3_dep ) {
+			if ( src3_dep_latch == EX_LATCH ) {
+				src3_dep_causes_stall = !ENABLE_EXE_FWD;
+			} else if ( src3_dep_latch == MA_LATCH ) {
+				src3_dep_causes_stall = !ENABLE_MEM_FWD;
+			}
+		}
+		if ( cc_dep ) {
+			if ( cc_dep_latch == EX_LATCH ) {
+				cc_dep_causes_stall = !ENABLE_EXE_FWD;
+			} else if ( cc_dep_latch == MA_LATCH ) {
+				cc_dep_causes_stall = !ENABLE_MEM_FWD;
+			}
+		}
+
+		// If we need to stall for any reason
+		if ( src1_dep_causes_stall ||
+		     src2_dep_causes_stall ||
+		     src3_dep_causes_stall ||
+		     cc_dep_causes_stall ) {
+			p->pipe_latch[ID_LATCH][ii].valid = false; // insert a bubble in this stage
+			p->pipe_latch[IF_LATCH][ii].stall = true;  // prevent fetch stage from grabbing more instructions
 		}
 	}
 }
@@ -243,6 +402,11 @@ void pipe_cycle_IF(Pipeline *p) {
 	bool tr_read_success;
 
 	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
+		// Prevent the next instruction fetch if ID stage has causes a stall
+		if ( p->pipe_latch[IF_LATCH][ii].stall ) {
+			continue;
+		}
+
 		pipe_get_fetch_op(p, &fetch_op);
 
 		if ( BPRED_POLICY != -1 ) {
