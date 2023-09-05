@@ -226,22 +226,19 @@ void pipe_cycle_ID(Pipeline *p) {
 	bool pipeline_stalled = false;
 	uint64_t oldest_id_stalled = 0;
 
-	bool src1_dep = false;
-	bool src2_dep = false;
-	bool src3_dep = false;
-	bool cc_dep = false;
-	Op_Type src1_dep_op_type = (Op_Type)0;
-	Op_Type src2_dep_op_type = (Op_Type)0;
-	Op_Type src3_dep_op_type = (Op_Type)0;
-	Op_Type cc_dep_op_type = (Op_Type)0;
-	uint64_t src1_dep_op_id = 0;
-	uint64_t src2_dep_op_id = 0;
-	uint64_t src3_dep_op_id = 0;
-	uint64_t cc_dep_op_id = 0;
-	Latch_Type src1_dep_latch = (Latch_Type)0;
-	Latch_Type src2_dep_latch = (Latch_Type)0;
-	Latch_Type src3_dep_latch = (Latch_Type)0;
-	Latch_Type cc_dep_latch = (Latch_Type)0;
+	/* Structure to record information about dependencies on other instructions */
+	typedef struct Data_Dependency_Struct {
+		bool exists{false};        // Indicates this dependency was found
+		Op_Type inst_op_type;      // The OP TYPE of the dependant instruction
+		uint64_t inst_op_id;       // OP ID of dep inst. used to determine youngest dep
+		Latch_Type inst_latch_loc; // Pipeline stage the dep inst. is located
+	} Data_Dependency;
+
+	// We are only concered with Read After Write dependencies
+	Data_Dependency src1_raw_dep = {};
+	Data_Dependency src2_raw_dep = {};
+	Data_Dependency src3_raw_dep = {};
+	Data_Dependency cc_raw_dep = {};
 
 	// First copy each incoming instruction into all ID latches
 	// So we can check accross pipeline lanes for dep later
@@ -265,85 +262,89 @@ void pipe_cycle_ID(Pipeline *p) {
 		}
 
 		/* CHECK EX_LATCH for Dependencies*/
-		if ( ex_inst.valid ) {                    // invalid instructions are "bubbles"
-			if ( ex_inst.tr_entry.dest_needed ) { // set if the instruction writes to destination
-				// RAW dep between src1 reg and EX_LATCH dest
-				if ( this_inst.tr_entry.src1_needed &&
-				     this_inst.tr_entry.src1_reg == ex_inst.tr_entry.dest ) {
-					// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
-					// Means largest op_id
-					src1_dep = true;
-					src1_dep_latch = EX_LATCH;
-					src1_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-					src1_dep_op_id = ex_inst.op_id;
-				}
-
-				// RAW dep between src2 reg and EX_LATCH dest
-				if ( this_inst.tr_entry.src2_needed &&
-				     this_inst.tr_entry.src2_reg == ex_inst.tr_entry.dest ) {
-					src2_dep = true;
-					src2_dep_latch = EX_LATCH;
-					src2_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-					src2_dep_op_id = ex_inst.op_id;
-				}
-
-				// RAW dep between src3 reg and EX_LATCH dest
-				if ( this_inst.tr_entry.src3_needed &&
-				     this_inst.tr_entry.src3_reg == ex_inst.tr_entry.dest ) {
-					src3_dep = true;
-					src3_dep_latch = EX_LATCH;
-					src3_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-					src3_dep_op_id = ex_inst.op_id;
-				}
+		if ( ex_inst.valid ) { // invalid instructions are "bubbles"
+			// RAW dep between src1 reg and EX_LATCH dest
+			if ( ex_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src1_needed &&
+			     this_inst.tr_entry.src1_reg == ex_inst.tr_entry.dest ) {
+				// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
+				// Means largest op_id
+				src1_raw_dep.exists = true;
+				src1_raw_dep.inst_latch_loc = EX_LATCH;
+				src1_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+				src1_raw_dep.inst_op_id = ex_inst.op_id;
 			}
+
+			// RAW dep between src2 reg and EX_LATCH dest
+			if ( ex_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src2_needed &&
+			     this_inst.tr_entry.src2_reg == ex_inst.tr_entry.dest ) {
+
+				src2_raw_dep.exists = true;
+				src2_raw_dep.inst_latch_loc = EX_LATCH;
+				src2_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+				src2_raw_dep.inst_op_id = ex_inst.op_id;
+			}
+
+			// RAW dep between src3 reg and EX_LATCH dest
+			if ( ex_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src3_needed &&
+			     this_inst.tr_entry.src3_reg == ex_inst.tr_entry.dest ) {
+				src3_raw_dep.exists = true;
+				src3_raw_dep.inst_latch_loc = EX_LATCH;
+				src3_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+				src3_raw_dep.inst_op_id = ex_inst.op_id;
+			}
+
 			// RAW dep between CC reg and EX_LATCH CC write
 			if ( ex_inst.tr_entry.cc_write &&
 			     this_inst.tr_entry.cc_read ) {
-				cc_dep = true;
-				cc_dep_latch = EX_LATCH;
-				cc_dep_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-				cc_dep_op_id = ex_inst.op_id;
+				cc_raw_dep.exists = true;
+				cc_raw_dep.inst_latch_loc = EX_LATCH;
+				cc_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
+				cc_raw_dep.inst_op_id = ex_inst.op_id;
 			}
 		}
 		/* CHECK MA_LATCH for Dependencies*/
-		if ( ma_inst.valid ) {                    // invalid instructions are "bubbles"
-			if ( ma_inst.tr_entry.dest_needed ) { // set if the instruction writes to destination
-				// RAW dep between src1 reg and MA_LATCH dest
-				if ( this_inst.tr_entry.src1_needed &&
-				     this_inst.tr_entry.src1_reg == ma_inst.tr_entry.dest ) {
-					// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
-					// Means largest op_id
-					src1_dep = true;
-					src1_dep_latch = MA_LATCH;
-					src1_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-					src1_dep_op_id = ma_inst.op_id;
-				}
+		if ( ma_inst.valid ) { // invalid instructions are "bubbles"
+			// RAW dep between src1 reg and MA_LATCH dest
+			if ( ma_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src1_needed &&
+			     this_inst.tr_entry.src1_reg == ma_inst.tr_entry.dest ) {
+				// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
+				// Means largest op_id
+				src1_raw_dep.exists = true;
+				src1_raw_dep.inst_latch_loc = MA_LATCH;
+				src1_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+				src1_raw_dep.inst_op_id = ma_inst.op_id;
+			}
 
-				// RAW dep between src2 reg and MA_LATCH dest
-				if ( this_inst.tr_entry.src2_needed &&
-				     this_inst.tr_entry.src2_reg == ma_inst.tr_entry.dest ) {
-					src2_dep = true;
-					src2_dep_latch = MA_LATCH;
-					src2_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-					src2_dep_op_id = ma_inst.op_id;
-				}
+			// RAW dep between src2 reg and MA_LATCH dest
+			if ( ma_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src2_needed &&
+			     this_inst.tr_entry.src2_reg == ma_inst.tr_entry.dest ) {
+				src2_raw_dep.exists = true;
+				src2_raw_dep.inst_latch_loc = MA_LATCH;
+				src2_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+				src2_raw_dep.inst_op_id = ma_inst.op_id;
+			}
 
-				// RAW dep between src3 reg and MA_LATCH dest
-				if ( this_inst.tr_entry.src3_needed &&
-				     this_inst.tr_entry.src3_reg == ma_inst.tr_entry.dest ) {
-					src3_dep = true;
-					src3_dep_latch = MA_LATCH;
-					src3_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-					src3_dep_op_id = ma_inst.op_id;
-				}
+			// RAW dep between src3 reg and MA_LATCH dest
+			if ( ma_inst.tr_entry.dest_needed &&
+			     this_inst.tr_entry.src3_needed &&
+			     this_inst.tr_entry.src3_reg == ma_inst.tr_entry.dest ) {
+				src3_raw_dep.exists = true;
+				src3_raw_dep.inst_latch_loc = MA_LATCH;
+				src3_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+				src3_raw_dep.inst_op_id = ma_inst.op_id;
 			}
 			// RAW dep between CC reg and MA_LATCH CC write
 			if ( ma_inst.tr_entry.cc_write &&
 			     this_inst.tr_entry.cc_read ) {
-				cc_dep = true;
-				cc_dep_latch = MA_LATCH;
-				cc_dep_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-				cc_dep_op_id = ma_inst.op_id;
+				cc_raw_dep.exists = true;
+				cc_raw_dep.inst_latch_loc = MA_LATCH;
+				cc_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
+				cc_raw_dep.inst_op_id = ma_inst.op_id;
 			}
 		}
 
@@ -353,31 +354,31 @@ void pipe_cycle_ID(Pipeline *p) {
 		bool src3_dep_causes_stall = false;
 		bool cc_dep_causes_stall = false;
 
-		if ( src1_dep ) {
-			if ( src1_dep_latch == EX_LATCH ) {
+		if ( src1_raw_dep.exists ) {
+			if ( src1_raw_dep.inst_latch_loc == EX_LATCH ) {
 				src1_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src1_dep_latch == MA_LATCH ) {
+			} else if ( src1_raw_dep.inst_latch_loc == MA_LATCH ) {
 				src1_dep_causes_stall = !ENABLE_MEM_FWD;
 			}
 		}
-		if ( src2_dep ) {
-			if ( src2_dep_latch == EX_LATCH ) {
+		if ( src2_raw_dep.exists ) {
+			if ( src2_raw_dep.inst_latch_loc == EX_LATCH ) {
 				src2_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src2_dep_latch == MA_LATCH ) {
+			} else if ( src2_raw_dep.inst_latch_loc == MA_LATCH ) {
 				src2_dep_causes_stall = !ENABLE_MEM_FWD;
 			}
 		}
-		if ( src3_dep ) {
-			if ( src3_dep_latch == EX_LATCH ) {
+		if ( src3_raw_dep.exists ) {
+			if ( src3_raw_dep.inst_latch_loc == EX_LATCH ) {
 				src3_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src3_dep_latch == MA_LATCH ) {
+			} else if ( src3_raw_dep.inst_latch_loc == MA_LATCH ) {
 				src3_dep_causes_stall = !ENABLE_MEM_FWD;
 			}
 		}
-		if ( cc_dep ) {
-			if ( cc_dep_latch == EX_LATCH ) {
+		if ( cc_raw_dep.exists ) {
+			if ( cc_raw_dep.inst_latch_loc == EX_LATCH ) {
 				cc_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( cc_dep_latch == MA_LATCH ) {
+			} else if ( cc_raw_dep.inst_latch_loc == MA_LATCH ) {
 				cc_dep_causes_stall = !ENABLE_MEM_FWD;
 			}
 		}
