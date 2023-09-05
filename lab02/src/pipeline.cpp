@@ -26,6 +26,16 @@ extern int32_t BPRED_POLICY;
 
 bool VERBOSE = false;
 
+/* Structure to record information about dependencies on other instructions */
+typedef struct Data_Dependency_Struct {
+	bool exists{false};        // Indicates this dependency was found
+	Op_Type inst_op_type;      // The OP TYPE of the dependant instruction
+	uint64_t inst_op_id;       // OP ID of dep inst. used to determine youngest dep
+	Latch_Type inst_latch_loc; // Pipeline stage the dep inst. is located
+} Data_Dependency;
+
+// Fills out the struct when a dep is detected
+void record_dependancy(Data_Dependency *dep, Pipeline_Latch *latch, Latch_Type latch_type);
 /**********************************************************************
  * Support Function: Read 1 Trace Record From File and populate Fetch Op
  **********************************************************************/
@@ -226,14 +236,6 @@ void pipe_cycle_ID(Pipeline *p) {
 	bool pipeline_stalled = false;
 	uint64_t oldest_id_stalled = 0;
 
-	/* Structure to record information about dependencies on other instructions */
-	typedef struct Data_Dependency_Struct {
-		bool exists{false};        // Indicates this dependency was found
-		Op_Type inst_op_type;      // The OP TYPE of the dependant instruction
-		uint64_t inst_op_id;       // OP ID of dep inst. used to determine youngest dep
-		Latch_Type inst_latch_loc; // Pipeline stage the dep inst. is located
-	} Data_Dependency;
-
 	// We are only concered with Read After Write dependencies
 	Data_Dependency src1_raw_dep = {};
 	Data_Dependency src2_raw_dep = {};
@@ -250,101 +252,48 @@ void pipe_cycle_ID(Pipeline *p) {
 
 	for ( int32_t ii = 0; ii < PIPE_WIDTH; ii++ ) {
 
-		// Copy potential next instruction from previous latch
-		p->pipe_latch[ID_LATCH][ii] = p->pipe_latch[IF_LATCH][ii];
-		Pipeline_Latch &this_inst = p->pipe_latch[ID_LATCH][ii];
-		Pipeline_Latch &ex_inst = p->pipe_latch[EX_LATCH][ii];
-		Pipeline_Latch &ma_inst = p->pipe_latch[MA_LATCH][ii];
+		// Save the current latch state for readability
+		Pipeline_Latch this_latch = p->pipe_latch[ID_LATCH][ii];
 
 		// Skip all checks for this lane if latch is "empy" (bubble)
-		if ( !this_inst.valid ) {
+		if ( !this_latch.valid ) {
 			continue;
 		}
 
-		/* CHECK EX_LATCH for Dependencies*/
-		if ( ex_inst.valid ) { // invalid instructions are "bubbles"
-			// RAW dep between src1 reg and EX_LATCH dest
-			if ( ex_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src1_needed &&
-			     this_inst.tr_entry.src1_reg == ex_inst.tr_entry.dest ) {
-				// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
-				// Means largest op_id
-				src1_raw_dep.exists = true;
-				src1_raw_dep.inst_latch_loc = EX_LATCH;
-				src1_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-				src1_raw_dep.inst_op_id = ex_inst.op_id;
-			}
+		// Check EX and MA Latches for colliding instructions
+		for ( const auto latch_type : {Latch_Type::EX_LATCH, Latch_Type::MA_LATCH} ) {
+			Pipeline_Latch &other_latch = p->pipe_latch[latch_type][ii];
+			if ( other_latch.valid ) { // invalid instructions are "bubbles"
+				// RAW dep between src1 reg and other_latch dest
+				if ( other_latch.tr_entry.dest_needed &&
+				     this_latch.tr_entry.src1_needed &&
+				     this_latch.tr_entry.src1_reg == other_latch.tr_entry.dest ) {
 
-			// RAW dep between src2 reg and EX_LATCH dest
-			if ( ex_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src2_needed &&
-			     this_inst.tr_entry.src2_reg == ex_inst.tr_entry.dest ) {
+					record_dependancy(&src1_raw_dep, &other_latch, latch_type);
+				}
 
-				src2_raw_dep.exists = true;
-				src2_raw_dep.inst_latch_loc = EX_LATCH;
-				src2_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-				src2_raw_dep.inst_op_id = ex_inst.op_id;
-			}
+				// RAW dep between src2 reg and other_latch dest
+				if ( other_latch.tr_entry.dest_needed &&
+				     this_latch.tr_entry.src2_needed &&
+				     this_latch.tr_entry.src2_reg == other_latch.tr_entry.dest ) {
 
-			// RAW dep between src3 reg and EX_LATCH dest
-			if ( ex_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src3_needed &&
-			     this_inst.tr_entry.src3_reg == ex_inst.tr_entry.dest ) {
-				src3_raw_dep.exists = true;
-				src3_raw_dep.inst_latch_loc = EX_LATCH;
-				src3_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-				src3_raw_dep.inst_op_id = ex_inst.op_id;
-			}
+					record_dependancy(&src2_raw_dep, &other_latch, latch_type);
+				}
 
-			// RAW dep between CC reg and EX_LATCH CC write
-			if ( ex_inst.tr_entry.cc_write &&
-			     this_inst.tr_entry.cc_read ) {
-				cc_raw_dep.exists = true;
-				cc_raw_dep.inst_latch_loc = EX_LATCH;
-				cc_raw_dep.inst_op_type = (Op_Type)ex_inst.tr_entry.op_type;
-				cc_raw_dep.inst_op_id = ex_inst.op_id;
-			}
-		}
-		/* CHECK MA_LATCH for Dependencies*/
-		if ( ma_inst.valid ) { // invalid instructions are "bubbles"
-			// RAW dep between src1 reg and MA_LATCH dest
-			if ( ma_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src1_needed &&
-			     this_inst.tr_entry.src1_reg == ma_inst.tr_entry.dest ) {
-				// Conditionally overwrite below info if a YOUNGER dependance is found (SUPERSCALAR)
-				// Means largest op_id
-				src1_raw_dep.exists = true;
-				src1_raw_dep.inst_latch_loc = MA_LATCH;
-				src1_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-				src1_raw_dep.inst_op_id = ma_inst.op_id;
-			}
+				// RAW dep between src3 reg and other_latch dest
+				if ( other_latch.tr_entry.dest_needed &&
+				     this_latch.tr_entry.src3_needed &&
+				     this_latch.tr_entry.src3_reg == other_latch.tr_entry.dest ) {
 
-			// RAW dep between src2 reg and MA_LATCH dest
-			if ( ma_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src2_needed &&
-			     this_inst.tr_entry.src2_reg == ma_inst.tr_entry.dest ) {
-				src2_raw_dep.exists = true;
-				src2_raw_dep.inst_latch_loc = MA_LATCH;
-				src2_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-				src2_raw_dep.inst_op_id = ma_inst.op_id;
-			}
+					record_dependancy(&src3_raw_dep, &other_latch, latch_type);
+				}
 
-			// RAW dep between src3 reg and MA_LATCH dest
-			if ( ma_inst.tr_entry.dest_needed &&
-			     this_inst.tr_entry.src3_needed &&
-			     this_inst.tr_entry.src3_reg == ma_inst.tr_entry.dest ) {
-				src3_raw_dep.exists = true;
-				src3_raw_dep.inst_latch_loc = MA_LATCH;
-				src3_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-				src3_raw_dep.inst_op_id = ma_inst.op_id;
-			}
-			// RAW dep between CC reg and MA_LATCH CC write
-			if ( ma_inst.tr_entry.cc_write &&
-			     this_inst.tr_entry.cc_read ) {
-				cc_raw_dep.exists = true;
-				cc_raw_dep.inst_latch_loc = MA_LATCH;
-				cc_raw_dep.inst_op_type = (Op_Type)ma_inst.tr_entry.op_type;
-				cc_raw_dep.inst_op_id = ma_inst.op_id;
+				// RAW dep between CC reg and other_latch CC write
+				if ( other_latch.tr_entry.cc_write &&
+				     this_latch.tr_entry.cc_read ) {
+
+					record_dependancy(&cc_raw_dep, &other_latch, latch_type);
+				}
 			}
 		}
 
@@ -392,6 +341,22 @@ void pipe_cycle_ID(Pipeline *p) {
 			p->pipe_latch[IF_LATCH][ii].stall = true;  // prevent fetch stage from grabbing more instructions
 		}
 	}
+}
+
+/* Check if the instruction in Latch A is dependent on Latch B*/
+// void check_latch(Pipeline_Latch* latch_a, Pipeline_Latch* latch_b) {
+// 		if (latch_b->tr_entry.dest_needed &&
+// 		latch_a->tr_entry.src1_needed &&
+// 		latch_a->tr_entry.src1_reg == latch_b->tr_entry.dest) {
+// 			record_dependancy(&src1_raw_dep, &latch_b, EX_LATCH);
+// 		}
+// }
+
+void record_dependancy(Data_Dependency *dep, Pipeline_Latch *latch, Latch_Type latch_type) {
+	dep->exists = true;
+	dep->inst_latch_loc = latch_type;
+	dep->inst_op_type = (Op_Type)latch->tr_entry.op_type;
+	dep->inst_op_id = latch->op_id;
 }
 
 //--------------------------------------------------------------------//
