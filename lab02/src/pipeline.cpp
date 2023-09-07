@@ -26,6 +26,9 @@ extern int32_t BPRED_POLICY;
 
 bool VERBOSE = false;
 
+// These definitions would normally be placed in the header but we can only
+// modify and submit pipeline.cpp.
+
 /* Structure to record information about dependencies on other instructions */
 typedef struct Data_Dependency_Struct {
 	bool exists{false};        // Indicates this dependency was found
@@ -35,7 +38,10 @@ typedef struct Data_Dependency_Struct {
 } Data_Dependency;
 
 // Fills out the struct when a dep is detected
-void record_dependancy(Data_Dependency *dep, Pipeline_Latch *latch, Latch_Type latch_type);
+void record_dependancy(Data_Dependency *, Pipeline_Latch *, Latch_Type);
+// Helper function to determine if a given dep should stall.
+// Uses ENABLE_MEM_FWD and ENABLE_EXE_FWD globals
+bool should_stall(Data_Dependency);
 /**********************************************************************
  * Support Function: Read 1 Trace Record From File and populate Fetch Op
  **********************************************************************/
@@ -236,40 +242,53 @@ void pipe_cycle_ID(Pipeline *p) {
 	bool pipeline_stalled = false;
 	uint64_t oldest_id_stalled = 0;
 
-	// We are only concered with Read After Write dependencies
-	Data_Dependency src1_raw_dep = {};
-	Data_Dependency src2_raw_dep = {};
-	Data_Dependency src3_raw_dep = {};
-	Data_Dependency cc_raw_dep = {};
-
 	// First copy each incoming instruction into all ID latches
-	// So we can check accross pipeline lanes for dep later
+	// So we can check across pipeline lanes for dep later.
 	for ( int32_t lane = 0; lane < PIPE_WIDTH; lane++ ) {
 		p->pipe_latch[ID_LATCH][lane] = p->pipe_latch[IF_LATCH][lane];
 		// clear any previous stalls, will be set again if needed
 		p->pipe_latch[IF_LATCH][lane].stall = false;
 	}
 
-	for ( int32_t ii = 0; ii < PIPE_WIDTH; ii++ ) {
+	// Now for every lane in the superscalar pipeline
+	for ( int32_t lane = 0; lane < PIPE_WIDTH; lane++ ) {
+
+		// We are only concered with Read After Write dependencies.
+		// Dependencies could exist between reading src1,src2,src3 or the status register
+		// and some other instruction's write destination register.
+		Data_Dependency src1_raw_dep = {};
+		Data_Dependency src2_raw_dep = {};
+		Data_Dependency src3_raw_dep = {};
+		Data_Dependency cc_raw_dep = {};
 
 		// Save the current latch state for readability
-		Pipeline_Latch this_latch = p->pipe_latch[ID_LATCH][ii];
+		Pipeline_Latch &this_latch = p->pipe_latch[ID_LATCH][lane];
 
 		// Skip all checks for this lane if latch is "empy" (bubble)
 		if ( !this_latch.valid ) {
 			continue;
 		}
 
-		// Check EX and MA Latches for colliding instructions
-		for ( const auto latch_type : {Latch_Type::EX_LATCH, Latch_Type::MA_LATCH} ) {
-			Pipeline_Latch &other_latch = p->pipe_latch[latch_type][ii];
-			if ( other_latch.valid ) { // invalid instructions are "bubbles"
+		for ( int32_t lane_j = 0; lane_j < PIPE_WIDTH; lane_j++ ) {
+
+			// Check Latches EX, MA and ID (in other lanes) for colliding instructions
+			for ( const auto latch_type : {Latch_Type::EX_LATCH, Latch_Type::MA_LATCH, Latch_Type::ID_LATCH} ) {
+				Pipeline_Latch &other_latch = p->pipe_latch[latch_type][lane_j];
+				// Skip invalid instructions, or younger instructions (in the case of ID_LATCH)
+				// (will execute after this one, so no hazard)
+				if ( !other_latch.valid ||
+				     other_latch.op_id >= this_latch.op_id ) {
+					continue;
+				}
 				// RAW dep between src1 reg and other_latch dest
 				if ( other_latch.tr_entry.dest_needed &&
 				     this_latch.tr_entry.src1_needed &&
 				     this_latch.tr_entry.src1_reg == other_latch.tr_entry.dest ) {
 
-					record_dependancy(&src1_raw_dep, &other_latch, latch_type);
+					// Only identify the *youngest* dependency. Older ones will finish first anyway
+					if ( !src1_raw_dep.exists || src1_raw_dep.inst_op_id < other_latch.op_id ) {
+						record_dependancy(&src1_raw_dep, &other_latch, latch_type);
+					}
 				}
 
 				// RAW dep between src2 reg and other_latch dest
@@ -277,7 +296,9 @@ void pipe_cycle_ID(Pipeline *p) {
 				     this_latch.tr_entry.src2_needed &&
 				     this_latch.tr_entry.src2_reg == other_latch.tr_entry.dest ) {
 
-					record_dependancy(&src2_raw_dep, &other_latch, latch_type);
+					if ( !src2_raw_dep.exists || src2_raw_dep.inst_op_id < other_latch.op_id ) {
+						record_dependancy(&src2_raw_dep, &other_latch, latch_type);
+					}
 				}
 
 				// RAW dep between src3 reg and other_latch dest
@@ -285,73 +306,71 @@ void pipe_cycle_ID(Pipeline *p) {
 				     this_latch.tr_entry.src3_needed &&
 				     this_latch.tr_entry.src3_reg == other_latch.tr_entry.dest ) {
 
-					record_dependancy(&src3_raw_dep, &other_latch, latch_type);
+					if ( !src3_raw_dep.exists || src3_raw_dep.inst_op_id < other_latch.op_id ) {
+						record_dependancy(&src3_raw_dep, &other_latch, latch_type);
+					}
 				}
 
 				// RAW dep between CC reg and other_latch CC write
 				if ( other_latch.tr_entry.cc_write &&
 				     this_latch.tr_entry.cc_read ) {
 
-					record_dependancy(&cc_raw_dep, &other_latch, latch_type);
+					if ( cc_raw_dep.exists || cc_raw_dep.inst_op_id < other_latch.op_id ) {
+						record_dependancy(&cc_raw_dep, &other_latch, latch_type);
+					}
 				}
 			}
 		}
 
-		// Determine if stalling is necessary, or if we can forward
-		bool src1_dep_causes_stall = false;
-		bool src2_dep_causes_stall = false;
-		bool src3_dep_causes_stall = false;
-		bool cc_dep_causes_stall = false;
-
-		if ( src1_raw_dep.exists ) {
-			if ( src1_raw_dep.inst_latch_loc == EX_LATCH ) {
-				src1_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src1_raw_dep.inst_latch_loc == MA_LATCH ) {
-				src1_dep_causes_stall = !ENABLE_MEM_FWD;
-			}
-		}
-		if ( src2_raw_dep.exists ) {
-			if ( src2_raw_dep.inst_latch_loc == EX_LATCH ) {
-				src2_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src2_raw_dep.inst_latch_loc == MA_LATCH ) {
-				src2_dep_causes_stall = !ENABLE_MEM_FWD;
-			}
-		}
-		if ( src3_raw_dep.exists ) {
-			if ( src3_raw_dep.inst_latch_loc == EX_LATCH ) {
-				src3_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( src3_raw_dep.inst_latch_loc == MA_LATCH ) {
-				src3_dep_causes_stall = !ENABLE_MEM_FWD;
-			}
-		}
-		if ( cc_raw_dep.exists ) {
-			if ( cc_raw_dep.inst_latch_loc == EX_LATCH ) {
-				cc_dep_causes_stall = !ENABLE_EXE_FWD;
-			} else if ( cc_raw_dep.inst_latch_loc == MA_LATCH ) {
-				cc_dep_causes_stall = !ENABLE_MEM_FWD;
-			}
-		}
-
 		// If we need to stall for any reason
-		if ( src1_dep_causes_stall ||
-		     src2_dep_causes_stall ||
-		     src3_dep_causes_stall ||
-		     cc_dep_causes_stall ) {
-			p->pipe_latch[ID_LATCH][ii].valid = false; // insert a bubble in this stage
-			p->pipe_latch[IF_LATCH][ii].stall = true;  // prevent fetch stage from grabbing more instructions
+		if ( should_stall(src1_raw_dep) || should_stall(src2_raw_dep) ||
+		     should_stall(src3_raw_dep) || should_stall(cc_raw_dep) ) {
+
+			this_latch.valid = false;                   // make this stage a bubble
+			p->pipe_latch[IF_LATCH][lane].stall = true; // prevent fetch stage from grabbing more instructions
+
+			for ( int32_t lane_i = 0; lane_i < PIPE_WIDTH; lane_i++ ) {
+				// Since this instruction is stalled, we need to stall any instructions that follow it
+				// in the other lanes. This ensures in-order execution.
+				if ( p->pipe_latch[ID_LATCH][lane_i].op_id > this_latch.op_id ) {
+					p->pipe_latch[ID_LATCH][lane_i].valid = false; // make that stage a bubble
+					p->pipe_latch[IF_LATCH][lane_i].stall = true;  // and stall the incoming instructions
+				}
+			}
 		}
 	}
 }
 
-/* Check if the instruction in Latch A is dependent on Latch B*/
-// void check_latch(Pipeline_Latch* latch_a, Pipeline_Latch* latch_b) {
-// 		if (latch_b->tr_entry.dest_needed &&
-// 		latch_a->tr_entry.src1_needed &&
-// 		latch_a->tr_entry.src1_reg == latch_b->tr_entry.dest) {
-// 			record_dependancy(&src1_raw_dep, &latch_b, EX_LATCH);
-// 		}
-// }
+// Helper function to determine if a given dep should stall.
+// Uses ENABLE_MEM_FWD and ENABLE_EXE_FWD globals
+bool should_stall(Data_Dependency dep) {
+	// Obvously shouldn't stall if there is no dependency
+	if ( !dep.exists )
+		return false;
+	// Otherwise, stall condition controlled by cmd line arguments (GLOBALS, eww)
+	// and the latch location of the dependant instruction
+	switch ( dep.inst_latch_loc ) {
+		case ID_LATCH:
+			// Instructions in other pipeline lane's ID_LATCH should always stall
+			return true;
+			break;
+		case EX_LATCH:
+			// Load instructions cannot be forwarded from EX_LATCH to ID_LATCH
+			// All others can
+			return (dep.inst_op_type == OP_LD) ? true : !ENABLE_EXE_FWD;
+			break;
+		case MA_LATCH:
+			// Instructions in the MA Latch can always be forwarded
+			return !ENABLE_MEM_FWD;
+			break;
+		default:
+			// This is bad and should never happen
+			assert(false);
+			break;
+	}
+}
 
+// Fills out the dependency struct to remove repatative code above
 void record_dependancy(Data_Dependency *dep, Pipeline_Latch *latch, Latch_Type latch_type) {
 	dep->exists = true;
 	dep->inst_latch_loc = latch_type;
@@ -363,13 +382,13 @@ void record_dependancy(Data_Dependency *dep, Pipeline_Latch *latch, Latch_Type l
 
 void pipe_cycle_IF(Pipeline *p) {
 	// TODO: UPDATE HERE (Part A, B)
-	int ii, jj;
 	Pipeline_Latch fetch_op;
 	bool tr_read_success;
 
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		// Prevent the next instruction fetch if ID stage has causes a stall
-		if ( p->pipe_latch[IF_LATCH][ii].stall ) {
+	// Fetch a new instruction for each pipeline lane
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		// Unless the respective ID stage has caused a stall
+		if ( p->pipe_latch[IF_LATCH][lane].stall ) {
 			continue;
 		}
 
@@ -378,7 +397,10 @@ void pipe_cycle_IF(Pipeline *p) {
 		if ( BPRED_POLICY != -1 ) {
 			pipe_check_bpred(p, &fetch_op);
 		}
-		p->pipe_latch[IF_LATCH][ii] = fetch_op;
+
+		// Insert the instruction, overwriting the previous value
+		// (hopefully already copied to ID_LATCH)
+		p->pipe_latch[IF_LATCH][lane] = fetch_op;
 	}
 }
 
