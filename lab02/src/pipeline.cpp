@@ -382,7 +382,7 @@ bool does_dep_cause_stall(Data_Dependency dep) {
 		case EX_LATCH:
 			// Load instructions cannot be forwarded from EX_LATCH to ID_LATCH
 			// All others can
-			return (dep.inst_op_type == OP_LD) ? true : !ENABLE_EXE_FWD;
+			return (dep.inst_op_type == OP_LD) || !ENABLE_EXE_FWD;
 			break;
 		case MA_LATCH:
 			// Instructions in the MA Latch can always be forwarded
