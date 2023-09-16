@@ -1,12 +1,16 @@
 /***********************************************************************
  * File         : pipeline.cpp
  * Author       : Jackson Miller
- * Date         : 15th September 2023
+ * Date         : Sep. 22, 2023
  * Description  : Superscalar Pipeline for Lab2 ECE 6100
  **********************************************************************/
 
 #include "pipeline.h"
 #include <cstdlib>
+
+// Definitions for branch prediction
+#define TAKEN true
+#define NOTTAKEN false
 
 extern int32_t PIPE_WIDTH;
 extern int32_t ENABLE_MEM_FWD;
@@ -193,13 +197,18 @@ void pipe_cycle(Pipeline *p) {
 
 void pipe_cycle_WB(Pipeline *p) {
 	// TODO: UPDATE HERE (Part B)
-	int ii;
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		if ( p->pipe_latch[MA_LATCH][ii].valid ) {
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		Pipeline_Latch this_latch = p->pipe_latch[MA_LATCH][lane];
+		if ( this_latch.valid ) {
 			p->stat_retired_inst++;
-			if ( p->pipe_latch[MA_LATCH][ii].op_id >= p->halt_op_id ) {
+			if ( this_latch.op_id >= p->halt_op_id ) {
 				p->halt = true;
 			}
+		}
+
+		// Check to unstall pipeline once branch has been resolved
+		if ( p->fetch_cbr_stall && this_latch.is_mispred_cbr ) {
+			p->fetch_cbr_stall = false;
 		}
 	}
 }
@@ -331,7 +340,6 @@ void pipe_cycle_ID(Pipeline *p) {
 void pipe_cycle_IF(Pipeline *p) {
 	// TODO: UPDATE HERE (Part A, B)
 	Pipeline_Latch fetch_op;
-	bool tr_read_success;
 
 	// Fetch a new instruction for each pipeline lane
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
@@ -340,26 +348,55 @@ void pipe_cycle_IF(Pipeline *p) {
 			continue;
 		}
 
-		pipe_get_fetch_op(p, &fetch_op);
+		// Check if fetching should be stalled due to branch mis-prediction
+		if ( !p->fetch_cbr_stall ) {
+			pipe_get_fetch_op(p, &fetch_op);
+			if ( BPRED_POLICY != -1 && fetch_op.tr_entry.op_type == OP_CBR ) {
+				pipe_check_bpred(p, &fetch_op);
+			}
 
-		if ( BPRED_POLICY != -1 ) {
-			pipe_check_bpred(p, &fetch_op);
+			// Insert the instruction, overwriting the previous value
+			// (hopefully already copied to ID_LATCH)
+			p->pipe_latch[IF_LATCH][lane] = fetch_op;
+		} else {
+			// In the case that fetch is currently stalled, insert a bubble
+			p->pipe_latch[IF_LATCH][lane].valid = false;
 		}
-
-		// Insert the instruction, overwriting the previous value
-		// (hopefully already copied to ID_LATCH)
-		p->pipe_latch[IF_LATCH][lane] = fetch_op;
 	}
 }
 
 //--------------------------------------------------------------------//
 
+// This function only called for OP_CBR type
 void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	// call branch predictor here, if mispred then mark in fetch_op
 	// update the predictor instantly
 	// stall fetch using the flag p->fetch_cbr_stall
 
-	// TODO: UPDATE HERE (Part B)
+	// Only update for CBR op types
+	if ( fetch_op->tr_entry.op_type != OP_CBR ) {
+		return;
+	}
+
+	// Count the number of branches encountered
+	p->b_pred->stat_num_branches++;
+
+	// This is the instruction PC
+	uint64_t pc = fetch_op->tr_entry.inst_addr;
+	// This is the true direction (TAKEN/NOTTAKEN)
+	bool resolved_dir = fetch_op->tr_entry.br_dir == 1 ? TAKEN : NOTTAKEN;
+	// This will get the prediction fot that PC
+	bool prediction = p->b_pred->GetPrediction(pc);
+
+	// Check for mispredicton
+	if ( prediction != resolved_dir ) {
+		fetch_op->is_mispred_cbr = true;
+		p->fetch_cbr_stall = true;
+		// Count the number of mispredictions encountered
+		p->b_pred->stat_num_mispred++;
+	}
+	// Always update the predictor immediately
+	p->b_pred->UpdatePredictor(pc, resolved_dir);
 }
 
 //--------------------------------------------------------------------//

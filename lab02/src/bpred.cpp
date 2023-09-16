@@ -7,22 +7,41 @@
 /////////////////////////////////////////////////////////////
 
 BPRED::BPRED(uint32_t policy) {
-	// TODO: UPDATE HERE (Part B)
+	// Panic if policy is invalid at runtime
+	if ( policy < 0 || policy >= NUM_BPRED_TYPE ) {
+		assert(false);
+	}
+
+	// Set instance policy
+	this->policy = static_cast<BPRED_TYPE>(policy);
 }
 
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
 
 bool BPRED::GetPrediction(uint32_t PC) {
-	// TODO: UPDATE HERE (Part B)
-	return TAKEN;
+	switch ( this->policy ) {
+		case BPRED_ALWAYS_TAKEN:
+			return TAKEN;
+			break;
+		default:
+			assert(false); // Panic if something is very wrong
+			break;
+	}
 }
 
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
 
 void BPRED::UpdatePredictor(uint32_t PC, bool resolveDir) {
-	// TODO: UPDATE HERE (Part B)
+	switch ( this->policy ) {
+		case BPRED_ALWAYS_TAKEN:
+			return;		// Nothing to be done for this policy
+			break;
+		default:
+			assert(false); // Panic if something is very wrong
+			break;
+	}
 }
 
 /////////////////////////////////////////////////////////////
