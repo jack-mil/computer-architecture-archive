@@ -387,6 +387,8 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	bool resolved_dir = fetch_op->tr_entry.br_dir == 1 ? TAKEN : NOTTAKEN;
 	// This will get the prediction fot that PC
 	bool prediction = p->b_pred->GetPrediction(pc);
+	// Always update the predictor immediately
+	p->b_pred->UpdatePredictor(pc, resolved_dir);
 
 	// Check for mispredicton
 	if ( prediction != resolved_dir ) {
@@ -395,8 +397,6 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 		// Count the number of mispredictions encountered
 		p->b_pred->stat_num_mispred++;
 	}
-	// Always update the predictor immediately
-	p->b_pred->UpdatePredictor(pc, resolved_dir);
 }
 
 //--------------------------------------------------------------------//
