@@ -24,12 +24,11 @@ bool VERBOSE = false;
 
 /* Structure to record information about dependencies on other instructions */
 typedef struct Data_Dependency_Struct {
-	bool exists{false};        // Indicates this dependency was found
-	Op_Type inst_op_type {NUM_OP_TYPE};      // The OP TYPE of the dependent instruction
-	uint64_t inst_op_id {0};       // OP ID of dep inst. used to determine youngest dep
-	Latch_Type inst_latch_loc {NUM_LATCH_TYPES}; // Pipeline stage the dep inst. is located
+	bool exists{false};                         // Indicates this dependency was found
+	Op_Type inst_op_type{NUM_OP_TYPE};          // The OP TYPE of the dependent instruction
+	uint64_t inst_op_id{0};                     // OP ID of dep inst. used to determine youngest dep
+	Latch_Type inst_latch_loc{NUM_LATCH_TYPES}; // Pipeline stage the dep inst. is located
 } Data_Dependency;
-
 
 // Fills out the struct when a dep is detected
 void record_dependancy(Data_Dependency *, Pipeline_Latch, Latch_Type);
@@ -197,7 +196,7 @@ void pipe_cycle(Pipeline *p) {
  **********************************************************************/
 
 void pipe_cycle_WB(Pipeline *p) {
-	// TODO: UPDATE HERE (Part B)
+
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 		Pipeline_Latch this_latch = p->pipe_latch[MA_LATCH][lane];
 		if ( this_latch.valid ) {
@@ -310,7 +309,7 @@ void pipe_cycle_ID(Pipeline *p) {
 				if ( other_latch.tr_entry.cc_write &&
 				     this_latch.tr_entry.cc_read ) {
 
-					if ( !cc_raw_dep.exists || other_latch.op_id > cc_raw_dep.inst_op_id  ) {
+					if ( !cc_raw_dep.exists || other_latch.op_id > cc_raw_dep.inst_op_id ) {
 						record_dependancy(&cc_raw_dep, other_latch, latch_type);
 					}
 				}
@@ -349,19 +348,24 @@ void pipe_cycle_IF(Pipeline *p) {
 			continue;
 		}
 
-		// Check if fetching should be stalled due to branch mis-prediction
-		if ( !p->fetch_cbr_stall ) {
+		// If the Fetch stage is stalled due to branch misprediction
+		// insert a bubble in the pipeline
+		if ( p->fetch_cbr_stall ) {
+			p->pipe_latch[IF_LATCH][lane].valid = false;
+		} else {
+			// Otherwise we are clear to fetch a new instruction
 			pipe_get_fetch_op(p, &fetch_op);
+
+			// Do branch prediction on CBR instructions if enabled
 			if ( BPRED_POLICY != -1 && fetch_op.tr_entry.op_type == OP_CBR ) {
+				// This prediction function has lots of side effects, and could
+				// cause the fetch stage to stall next cycle on misprediction
 				pipe_check_bpred(p, &fetch_op);
 			}
 
 			// Insert the instruction, overwriting the previous value
-			// (hopefully already copied to ID_LATCH)
+			// (which is already copied to ID_LATCH)
 			p->pipe_latch[IF_LATCH][lane] = fetch_op;
-		} else {
-			// In the case that fetch is currently stalled, insert a bubble
-			p->pipe_latch[IF_LATCH][lane].valid = false;
 		}
 	}
 }
@@ -369,6 +373,9 @@ void pipe_cycle_IF(Pipeline *p) {
 //--------------------------------------------------------------------//
 
 // This function only called for OP_CBR type
+// It has the ability to stall the fetch stage(s) of the pipelines,
+// and mark an inst "fetch_op" as a cbr that caused a stall.
+// Branch prediction is done according to policy set by cmd args.
 void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	// call branch predictor here, if mispred then mark in fetch_op
 	// update the predictor instantly
@@ -393,6 +400,8 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 
 	// Check for mispredicton
 	if ( prediction != resolved_dir ) {
+		// Stall the fetch stage and mark this cbr as problematic
+		// This allows the WB stage to unstall the pipeline
 		fetch_op->is_mispred_cbr = true;
 		p->fetch_cbr_stall = true;
 		// Count the number of mispredictions encountered
