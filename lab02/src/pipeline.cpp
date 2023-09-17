@@ -25,10 +25,11 @@ bool VERBOSE = false;
 /* Structure to record information about dependencies on other instructions */
 typedef struct Data_Dependency_Struct {
 	bool exists{false};        // Indicates this dependency was found
-	Op_Type inst_op_type;      // The OP TYPE of the dependent instruction
-	uint64_t inst_op_id;       // OP ID of dep inst. used to determine youngest dep
-	Latch_Type inst_latch_loc; // Pipeline stage the dep inst. is located
+	Op_Type inst_op_type {NUM_OP_TYPE};      // The OP TYPE of the dependent instruction
+	uint64_t inst_op_id {0};       // OP ID of dep inst. used to determine youngest dep
+	Latch_Type inst_latch_loc {NUM_LATCH_TYPES}; // Pipeline stage the dep inst. is located
 } Data_Dependency;
+
 
 // Fills out the struct when a dep is detected
 void record_dependancy(Data_Dependency *, Pipeline_Latch, Latch_Type);
@@ -280,7 +281,7 @@ void pipe_cycle_ID(Pipeline *p) {
 				     this_latch.tr_entry.src1_reg == other_latch.tr_entry.dest ) {
 
 					// Only identify the *youngest* dependency. Older ones will finish first anyway
-					if ( !src1_raw_dep.exists || src1_raw_dep.inst_op_id < other_latch.op_id ) {
+					if ( !src1_raw_dep.exists || other_latch.op_id > src1_raw_dep.inst_op_id ) {
 						record_dependancy(&src1_raw_dep, other_latch, latch_type);
 					}
 				}
@@ -290,7 +291,7 @@ void pipe_cycle_ID(Pipeline *p) {
 				     this_latch.tr_entry.src2_needed &&
 				     this_latch.tr_entry.src2_reg == other_latch.tr_entry.dest ) {
 
-					if ( !src2_raw_dep.exists || src2_raw_dep.inst_op_id < other_latch.op_id ) {
+					if ( !src2_raw_dep.exists || other_latch.op_id > src2_raw_dep.inst_op_id ) {
 						record_dependancy(&src2_raw_dep, other_latch, latch_type);
 					}
 				}
@@ -300,7 +301,7 @@ void pipe_cycle_ID(Pipeline *p) {
 				     this_latch.tr_entry.src3_needed &&
 				     this_latch.tr_entry.src3_reg == other_latch.tr_entry.dest ) {
 
-					if ( !src3_raw_dep.exists || src3_raw_dep.inst_op_id < other_latch.op_id ) {
+					if ( !src3_raw_dep.exists || other_latch.op_id > src3_raw_dep.inst_op_id ) {
 						record_dependancy(&src3_raw_dep, other_latch, latch_type);
 					}
 				}
@@ -309,7 +310,7 @@ void pipe_cycle_ID(Pipeline *p) {
 				if ( other_latch.tr_entry.cc_write &&
 				     this_latch.tr_entry.cc_read ) {
 
-					if ( cc_raw_dep.exists || cc_raw_dep.inst_op_id < other_latch.op_id ) {
+					if ( !cc_raw_dep.exists || other_latch.op_id > cc_raw_dep.inst_op_id  ) {
 						record_dependancy(&cc_raw_dep, other_latch, latch_type);
 					}
 				}
