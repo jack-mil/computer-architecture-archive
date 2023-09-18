@@ -389,11 +389,17 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	// Count the number of branches encountered
 	p->b_pred->stat_num_branches++;
 
-	// This is the instruction PC
-	uint64_t pc = fetch_op->tr_entry.inst_addr;
+	// Nothing left to do if using perfect prediction
+	if (BPRED_POLICY == BPRED_PERFECT) {
+		return;
+	}
+
 	// This is the true direction (TAKEN/NOTTAKEN)
 	bool resolved_dir = fetch_op->tr_entry.br_dir == 1 ? TAKEN : NOTTAKEN;
-	// This will get the prediction fot that PC
+
+	// This is the instruction PC
+	uint64_t pc = fetch_op->tr_entry.inst_addr;
+	// Get the prediction based on b_pred instance policy (set during init)
 	bool prediction = p->b_pred->GetPrediction(pc);
 	// Always update the predictor immediately
 	p->b_pred->UpdatePredictor(pc, resolved_dir);
