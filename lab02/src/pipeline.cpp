@@ -197,15 +197,22 @@ void pipe_cycle(Pipeline *p) {
 
 void pipe_cycle_WB(Pipeline *p) {
 
-	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
-		Pipeline_Latch this_latch = p->pipe_latch[MA_LATCH][lane];
-		if ( this_latch.valid ) {
-			p->stat_retired_inst++;
-			if ( this_latch.op_id >= p->halt_op_id ) {
-				p->halt = true;
-			}
+	// Commit instructions for each lane of the superscalar pipeline
+	for ( uint32_t lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		const Pipeline_Latch this_latch = p->pipe_latch[MA_LATCH][lane];
+		// Skip if invalid instruction (bubble)
+		if ( !this_latch.valid ) {
+			continue;
+		}
+		// Count the number of commited instructions (for CPI calculation)
+		p->stat_retired_inst++;
+
+		// Set halt flag if trace is complete (consumed by sim.cpp)
+		if ( this_latch.op_id >= p->halt_op_id ) {
+			p->halt = true;
 		}
 
+		// Part B
 		// Check to unstall pipeline once branch has been resolved
 		if ( p->fetch_cbr_stall && this_latch.is_mispred_cbr ) {
 			p->fetch_cbr_stall = false;
