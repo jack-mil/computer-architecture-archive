@@ -223,8 +223,7 @@ void pipe_cycle_WB(Pipeline *p) {
 //--------------------------------------------------------------------//
 
 void pipe_cycle_MA(Pipeline *p) {
-	int ii;
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
+	for ( uint32_t ii = 0; ii < PIPE_WIDTH; ii++ ) {
 		p->pipe_latch[MA_LATCH][ii] = p->pipe_latch[EX_LATCH][ii];
 	}
 }
@@ -232,8 +231,7 @@ void pipe_cycle_MA(Pipeline *p) {
 //--------------------------------------------------------------------//
 
 void pipe_cycle_EX(Pipeline *p) {
-	int ii;
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
+	for ( uint32_t ii = 0; ii < PIPE_WIDTH; ii++ ) {
 		p->pipe_latch[EX_LATCH][ii] = p->pipe_latch[ID_LATCH][ii];
 	}
 }
@@ -274,7 +272,7 @@ void pipe_cycle_ID(Pipeline *p) {
 
 			// Check Latches EX, MA and ID (in other lanes) for colliding instructions
 			for ( const auto latch_type : {Latch_Type::EX_LATCH, Latch_Type::MA_LATCH, Latch_Type::ID_LATCH} ) {
-				Pipeline_Latch &other_latch = p->pipe_latch[latch_type][lane_j];
+				const Pipeline_Latch &other_latch = p->pipe_latch[latch_type][lane_j];
 				// Skip invalid instructions, or younger instructions (in the case of ID_LATCH)
 				// (will execute after this one, so no hazard)
 				if ( !other_latch.valid ||
@@ -349,7 +347,7 @@ void pipe_cycle_IF(Pipeline *p) {
 	Pipeline_Latch fetch_op;
 
 	// Fetch a new instruction for each pipeline lane
-	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+	for ( uint32_t lane = 0; lane < PIPE_WIDTH; lane++ ) {
 		// Unless the respective ID stage has caused a stall
 		if ( p->pipe_latch[IF_LATCH][lane].stall ) {
 			continue;
@@ -359,21 +357,21 @@ void pipe_cycle_IF(Pipeline *p) {
 		// insert a bubble in the pipeline
 		if ( p->fetch_cbr_stall ) {
 			p->pipe_latch[IF_LATCH][lane].valid = false;
-		} else {
-			// Otherwise we are clear to fetch a new instruction
-			pipe_get_fetch_op(p, &fetch_op);
-
-			// Do branch prediction on CBR instructions if enabled
-			if ( BPRED_POLICY != -1 && fetch_op.tr_entry.op_type == OP_CBR ) {
-				// This prediction function has lots of side effects, and could
-				// cause the fetch stage to stall next cycle on misprediction
-				pipe_check_bpred(p, &fetch_op);
-			}
-
-			// Insert the instruction, overwriting the previous value
-			// (which is already copied to ID_LATCH)
-			p->pipe_latch[IF_LATCH][lane] = fetch_op;
+			continue;
 		}
+		// Otherwise we are clear to fetch a new instruction
+		pipe_get_fetch_op(p, &fetch_op);
+
+		// Do branch prediction on CBR instructions if enabled
+		if ( BPRED_POLICY != -1 && fetch_op.tr_entry.op_type == OP_CBR ) {
+			// This prediction function has lots of side effects, and could
+			// cause the fetch stage to stall next cycle on misprediction
+			pipe_check_bpred(p, &fetch_op);
+		}
+
+		// Insert the instruction, overwriting the previous value
+		// (which is already copied to ID_LATCH)
+		p->pipe_latch[IF_LATCH][lane] = fetch_op;
 	}
 }
 
@@ -397,7 +395,7 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	p->b_pred->stat_num_branches++;
 
 	// Nothing left to do if using perfect prediction
-	if (BPRED_POLICY == BPRED_PERFECT) {
+	if ( BPRED_POLICY == BPRED_PERFECT ) {
 		return;
 	}
 
