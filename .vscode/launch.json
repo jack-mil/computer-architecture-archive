@@ -33,7 +33,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/lab02/src/sim",
-            "args": ["../traces/sml.ptr.gz"],
+            "args": ["-pipewidth", "2", "-enablememfwd", "-enableexefwd", "-bpredpolicy", "2", "../traces/sml.ptr.gz"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/lab02/src/",
             "environment": [],

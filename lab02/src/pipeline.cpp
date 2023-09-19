@@ -213,7 +213,7 @@ void pipe_cycle_WB(Pipeline *p) {
 		}
 
 		// Part B
-		// Check to unstall pipeline once branch has been resolved
+		// Check to un-stall pipeline once branch has been resolved
 		if ( p->fetch_cbr_stall && this_latch.is_mispred_cbr ) {
 			p->fetch_cbr_stall = false;
 		}
@@ -409,10 +409,10 @@ void pipe_check_bpred(Pipeline *p, Pipeline_Latch *fetch_op) {
 	// Always update the predictor immediately
 	p->b_pred->UpdatePredictor(pc, resolved_dir);
 
-	// Check for mispredicton
+	// Check for misprediction
 	if ( prediction != resolved_dir ) {
 		// Stall the fetch stage and mark this cbr as problematic
-		// This allows the WB stage to unstall the pipeline
+		// This allows the WB stage to un-stall the pipeline
 		fetch_op->is_mispred_cbr = true;
 		p->fetch_cbr_stall = true;
 		// Count the number of mispredictions encountered

@@ -26,17 +26,6 @@ inline uint16_t tourn_index(uint32_t pc) {
 	return (pc & MASK10);
 }
 
-// Helper inline functions for state machine increment
-inline unsigned int state_inc(unsigned int i) {
-	if ( i < 3 )
-		return i + 1;
-	return i;
-}
-inline unsigned int state_dec(unsigned int i) {
-	if ( i > 0 )
-		return i - 1;
-	return i;
-}
 
 /* Take a PHT and an index and update the 2-bit state machine */
 void update_at_index(uint32_t *, uint16_t, bool);
@@ -60,11 +49,10 @@ BPRED::BPRED(uint32_t policy) {
 	// Start shift register with 0s
 	this->global_hist_reg = 0;
 
-	// Initilize the PHT(s) to the weakly taken state "10" = 2;
+	// Initialize the PHT(s) to the weakly taken state "10" = 2;
 	std::fill_n(gshare_pattern_table, 1 << 14, 2u);
 	std::fill_n(this->gselect_pattern_table, 1 << 14, 2u);
 	std::fill_n(this->tournament_pattern_table, 1 << 10, 2u);
-
 }
 
 /////////////////////////////////////////////////////////////
@@ -81,7 +69,7 @@ bool BPRED::GetPrediction(uint32_t PC) {
 
 	/* DO GSELECT */
 	// Index into PHT is 7 low bits of PC concat with the 7 low bits of GHR
-	uint16_t gselect_ind = gselect_index(PC,this->global_hist_reg);
+	uint16_t gselect_ind = gselect_index(PC, this->global_hist_reg);
 	// Predict TAKEN if counter is '11' or '10', NOT-TAKEN if '01' or '00'
 	this->latest_gselect_pred = this->gselect_pattern_table[gselect_ind] >= 2;
 
@@ -112,10 +100,12 @@ bool BPRED::GetPrediction(uint32_t PC) {
 void BPRED::UpdatePredictor(uint32_t PC, bool resolveDir) {
 
 	// Return early to save work if always taken
-	if ( this->policy == BPRED_ALWAYS_TAKEN )
+	if ( this->policy == BPRED_ALWAYS_TAKEN ) {
 		return;
+	}
 
-	// THESE NEED TO BE CONDITIONAL (??)
+	// All predictors are updated regardless of policy. This makes Tournament convenient
+
 	/* DO GSHARE */
 	// Index into PHT is 14 bits of PC XORed with the 14 bits of GHR
 	uint16_t gshare_ind = gshare_index(PC, this->global_hist_reg);
@@ -123,7 +113,7 @@ void BPRED::UpdatePredictor(uint32_t PC, bool resolveDir) {
 
 	/* DO GSELECT */
 	// Index into PHT is 7 low bits of PC concat with the 7 low bits of GHR
-	uint16_t gselect_ind = gselect_index(PC,this->global_hist_reg);
+	uint16_t gselect_ind = gselect_index(PC, this->global_hist_reg);
 	update_at_index(gselect_pattern_table, gselect_ind, resolveDir);
 
 	/* DO TOURNAMENT */
@@ -131,33 +121,37 @@ void BPRED::UpdatePredictor(uint32_t PC, bool resolveDir) {
 	uint16_t tourn_ind = tourn_index(PC);
 	// If the predictions differ
 	if ( this->latest_gselect_pred != this->latest_gshare_pred ) {
-		if ( this->latest_gselect_pred == resolveDir ) {
-			update_at_index(tournament_pattern_table, tourn_ind, true);
-		} else if ( this->latest_gshare_pred == resolveDir ) { // I think this condition is inherent
-			update_at_index(tournament_pattern_table, tourn_ind, false);
-		} else {
-			// this should never occur?
-			assert(false);
-		}
+		// Increment state if gselect prediction was correct, decrement if gshare was correct
+		// (Inherent due to not-equal check above)
+		update_at_index(tournament_pattern_table, tourn_ind, this->latest_gselect_pred == resolveDir);
 	}
 
 	/* Update GHR (Importantly after the table(s) are indexed */
-	uint32_t next_ghr;
 	if ( resolveDir == TAKEN ) {
 		// Shift a 1 into GHR, then mask to 14 bits
-		next_ghr = ((this->global_hist_reg << 1) + 1u) & MASK14;
+		this->global_hist_reg = ((this->global_hist_reg << 1) + 1u) & MASK14;
 	} else {
 		// Shift a 0 into GHR, then mask to 14 bits
-		next_ghr = (this->global_hist_reg << 1) & MASK14;
+		this->global_hist_reg = (this->global_hist_reg << 1) & MASK14;
 	}
-	// Update the Global History Register
-	this->global_hist_reg = next_ghr;
+}
+
+// Helper inline functions for state machine increment
+inline unsigned int state_inc(unsigned int i) {
+	if ( i < 3 )
+		return i + 1;
+	return i;
+}
+inline unsigned int state_dec(unsigned int i) {
+	if ( i > 0 )
+		return i - 1;
+	return i;
 }
 
 /* Take a PHT and an index and update the 2-bit state machine */
 void update_at_index(uint32_t *table, uint16_t index, bool resolveDir) {
+	// Get the current state, then update in place
 	uint32_t curr_state = table[index];
-	// Update the Pattern History Table
 	if ( resolveDir == TAKEN ) {
 		table[index] = state_inc(curr_state);
 	} else {

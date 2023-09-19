@@ -1,12 +1,8 @@
 {
-    "cSpell.enabled": true,
-    "spellright.language": [
-        "en"
-    ],
-    "spellright.documentTypes": [
-        "markdown",
-        "latex",
-        "plaintext",
-        "cpp"
+    "cSpell.words": [
+        "GSELECT",
+        "GSHARE",
+        "misprediction",
+        "Superscalar"
     ]
 }

@@ -3,6 +3,8 @@
 #include <cassert>
 #include <inttypes.h>
 
+/* Header is given as is and cannot be modified for the assignment */
+
 static inline uint32_t SatIncrement(uint32_t x, uint32_t max) {
 	if ( x < max )
 		return x + 1;
