@@ -3,6 +3,7 @@
         "GSELECT",
         "GSHARE",
         "misprediction",
-        "Superscalar"
-    ]
+        "Superscalar",
+        "writeback"
+    ],
 }

@@ -1,65 +1,68 @@
+/*
+ * File         : rat.cpp
+ * Author       : Jackson Miller
+ * Date         : 11th October 2023
+ * Description  : RAT structure for out of order pipeline
+ */
 #include <assert.h>
 #include <stdio.h>
 
 #include "rat.h"
 
-/////////////////////////////////////////////////////////////
-// Init function initializes the RAT
-/////////////////////////////////////////////////////////////
-
+/* Initializes the RAT and set all entries to invalid */
 RAT *RAT_init(void) {
-	int ii;
+	// Allocate space for RAT object
 	RAT *t = (RAT *)calloc(1, sizeof(RAT));
-	for ( ii = 0; ii < MAX_ARF_REGS; ii++ ) {
-		t->RAT_Entries[ii].valid = false;
+	for ( int i = 0; i < MAX_ARF_REGS; i++ ) {
+		// Invalidate all inital entries
+		t->RAT_Entries[i].valid = false;
 	}
 	return t;
 }
 
-/////////////////////////////////////////////////////////////
-// Print State
-/////////////////////////////////////////////////////////////
+/* Print a representation of the RAT state (entry number and PR id) */
 void RAT_print_state(RAT *t) {
-	int ii = 0;
 	printf("Printing RAT \n");
 	printf("Entry  Valid  prf_id\n");
-	for ( ii = 0; ii < MAX_ARF_REGS; ii++ ) {
-		printf("%5d ::  %d \t\t", ii, t->RAT_Entries[ii].valid);
-		printf("%5d \n", (int)t->RAT_Entries[ii].prf_id);
+	for ( int i = 0; i < MAX_ARF_REGS; i++ ) {
+		printf("%5d ::  %d \t\t", i, t->RAT_Entries[i].valid);
+		printf("%5d \n", (int)t->RAT_Entries[i].prf_id);
 	}
 	printf("\n");
 }
 
-/////////////////////////////////////////////////////////////
-//------- DO NOT CHANGE THE CODE ABOVE THIS LINE -----------
-/////////////////////////////////////////////////////////////
+/*------- DO NOT CHANGE THE CODE ABOVE THIS LINE -----------*/
 
-/////////////////////////////////////////////////////////////
-// For source registers, we need RAT to provide renamed reg
-/////////////////////////////////////////////////////////////
+/*
+ * The RAT will return which ROB entry (PRF_ID) maps to arf_id.
+ * Return -1 if the entry is invalid.
+ */
 
 int RAT_get_remap(RAT *t, int arf_id) {
+
+	if ( t->RAT_Entries[arf_id].valid ) {
+		return t->RAT_Entries[arf_id].prf_id;
+	} else {
+		return -1;
+	}
 }
 
-/////////////////////////////////////////////////////////////
-// For destination regs, we need to remap ARF to PRF
-/////////////////////////////////////////////////////////////
-
+/* For destination regs, remap ARF to PRF (ROB tag) */
 void RAT_set_remap(RAT *t, int arf_id, int prf_id) {
+	t->RAT_Entries[arf_id].valid = true;
+	t->RAT_Entries[arf_id].prf_id = prf_id;
 }
 
-/////////////////////////////////////////////////////////////
-// On commit, we may need to reset RAT information
-/////////////////////////////////////////////////////////////
-
+/* On commit, invalidate (reset) RAT information for a particular entry */
 void RAT_reset_entry(RAT *t, int arf_id) {
+	t->RAT_Entries[arf_id].valid = false;
 }
 
-/////////////////////////////////////////////////////////////
-// Flush all RAT entries
-/////////////////////////////////////////////////////////////
-
+/* Flush (invalidate) all RAT entries */
 void RAT_flush(RAT *t) {
+	for ( int i = 0; i < MAX_ARF_REGS; i++ ) {
+		t->RAT_Entries[i].valid = false;
+	}
 }
 
 /***********************************************************/

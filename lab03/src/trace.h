@@ -54,8 +54,7 @@ typedef struct Inst_Info_Struct {
 	int32_t exception_handler_cost; // Number of cycles an exception hander takes
 
 	// needed for multi-cycle execution
-	int exe_wait_cycles; // we will use this
-	// for cache lookup
+	int exe_wait_cycles; // we will use this for cache lookup
 	uint64_t mem_addr; // Load / Store Memory Address
 
 } Inst_Info;
