@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 
 	FILE *tr_file;
 	char tr_filename[1024];
-	char cmd_string[256];
+	char cmd_string[1280];
 
 	if ( argc < 1 ) {
 		die_message("Must Provide a Trace File");
@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
 
 	// ------- Print Statistics------------------------------------------
 	print_stats();
-	fclose(tr_file);
+	pclose(tr_file);
 	return 0;
 }
 

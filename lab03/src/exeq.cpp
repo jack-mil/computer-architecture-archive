@@ -49,7 +49,7 @@ void EXEQ_cycle(EXEQ *t) {
 // insert entry in EXEQ, exit if no space!
 /////////////////////////////////////////////////////////////
 
-void EXEQ_insert(EXEQ *t, Inst_Info inst, cache *c) {
+void EXEQ_insert(EXEQ *t, Inst_Info inst, Cache *c) {
 	int ii;
 
 	for ( ii = 0; ii < MAX_EXEQ_ENTRIES; ii++ ) {

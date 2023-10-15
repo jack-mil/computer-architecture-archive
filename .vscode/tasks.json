@@ -35,6 +35,23 @@
                 "isDefault": false
             },
             "detail": "Build a project using a local makefile"
+        },{
+            "label": "Lab 03 Make",
+            "type": "shell",
+            "command": "make",
+            "args": [ "all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/lab03/src/"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "detail": "Build a project using a local makefile"
         }
     ],
     "version": "2.0.0"

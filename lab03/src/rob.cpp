@@ -59,14 +59,16 @@ int ROB_insert(ROB *t, Inst_Info inst) {
 	assert(!t->ROB_Entries[t->tail_ptr].valid);
 
 	// Save the tag this inst is inserted at for return
-	int prf_id = t->tail_ptr;
-	t->ROB_Entries[t->tail_ptr].inst = inst;
-	t->ROB_Entries[t->tail_ptr].valid = true;
+	int rob_tag = t->tail_ptr;
+	t->ROB_Entries[rob_tag].inst = inst;
+	t->ROB_Entries[rob_tag].valid = true;
+	t->ROB_Entries[rob_tag].exec = false;
+	t->ROB_Entries[rob_tag].ready = false;
 
 	// Increment tail ptr circularly
 	t->tail_ptr = (t->tail_ptr + 1) % NUM_ROB_ENTRIES;
 
-	return prf_id;
+	return rob_tag;
 }
 
 /////////////////////////////////////////////////////////////
@@ -83,11 +85,12 @@ void ROB_mark_exec(ROB *t, Inst_Info inst) {
 	}
 }
 
-/////////////////////////////////////////////////////////////
-// Once an instruction finishes execution, mark rob entry as done
-/////////////////////////////////////////////////////////////
-
+/* Search the ROB for given instruction, and mark it ready for commit
+ * Broadcast completion to other entries waiting on this tag
+ */
 void ROB_mark_ready(ROB *t, Inst_Info inst) {
+	// We have to search the table,
+	// because entries can finish out of order
 	for ( int tag = 0; tag < NUM_ROB_ENTRIES; tag++ ) {
 		// Skip if invalid
 		if ( !t->ROB_Entries[tag].valid )
@@ -118,27 +121,27 @@ bool ROB_check_head(ROB *t) {
 		return t->ROB_Entries[t->head_ptr].ready;
 	}
 	// Should never happen
-	assert(false);
+	return false;
 }
 
-/* For writeback of freshly ready tags, wakeup waiting inst */
+/* For writeback of freshly ready tags, broadcast completion to waiting inst */
 void ROB_wakeup(ROB *t, int tag) {
-	t->ROB_Entries[tag].ready = true;
 	Inst_Info &this_inst = t->ROB_Entries[tag].inst;
+	assert(this_inst.dr_tag == tag); // sanity check
 	// Search the ROB for other entries waiting on this data
-	for ( int tag = 0; tag < NUM_ROB_ENTRIES; tag++ ) {
+	for ( int i = 0; i < NUM_ROB_ENTRIES; i++ ) {
 		// Skip invalid entry
-		if ( !t->ROB_Entries[tag].valid )
+		if ( !t->ROB_Entries[i].valid )
 			continue;
 
 		// Set src1/2 ready if the destination of completing instr
 		// matches one of the sources (renamed tags)
-		if ( this_inst.dr_tag == t->ROB_Entries[tag].inst.src1_tag ) {
-			t->ROB_Entries[tag].inst.src1_ready = true;
+		if ( this_inst.dr_tag == t->ROB_Entries[i].inst.src1_tag ) {
+			t->ROB_Entries[i].inst.src1_ready = true;
 		}
 
-		if ( this_inst.dr_tag == t->ROB_Entries[tag].inst.src2_tag ) {
-			t->ROB_Entries[tag].inst.src2_ready = true;
+		if ( this_inst.dr_tag == t->ROB_Entries[i].inst.src2_tag ) {
+			t->ROB_Entries[i].inst.src2_ready = true;
 		}
 	}
 }

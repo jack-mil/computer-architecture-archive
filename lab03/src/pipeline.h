@@ -60,7 +60,7 @@ typedef struct Pipeline {
 	uint64_t last_recovery_inst;
 	Exception_State exception_state;
 
-	cache *pipeline_cache;
+	Cache *pipeline_cache;
 
 } Pipeline;
 

@@ -15,6 +15,11 @@
  * Author       : Samy Amer
  * Date         : 19 September 2023
  * Description  : Out of Order Pipeline for Lab3 CS4290/CS6290/ECE4100/ECE6100 [Fall 2023]
+ *
+ * Lab 03 Assignment Submission
+ * Author       : Jackson Miller
+ * Data         : 14 October 2023
+ * Description  : Completed Assignment
  **********************************************************************/
 
 #include "pipeline.h"
@@ -183,6 +188,9 @@ void pipe_cycle(Pipeline *p) {
 	pipe_cycle_issue(p);
 	pipe_cycle_decode(p);
 	pipe_cycle_fetch(p);
+
+	// pipe_print_state(p);
+	// printf("");
 }
 
 //--------------------------------------------------------------------//
@@ -254,6 +262,9 @@ void pipe_cycle_decode(Pipeline *p) {
 
 	int jj = 0;
 
+	// Static means this variable will keep value
+	// across function calls. Ensures that all instructions
+	// are decoded in order.
 	static uint64_t start_inst_id = 1;
 
 	// Loop Over ID Latch
@@ -285,8 +296,54 @@ void pipe_cycle_issue(Pipeline *p) {
 
 	// TODO: Find space in ROB and transfer instruction (valid = 1, exec = 0, ready = 0)
 	// TODO: If src1/src2 is not remapped, set src1ready/src2ready
-	// TODO: If src1/src is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
+	// TODO: If src1/src2 is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
 	// TODO: Set dr_tag
+
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		// Skip this lane if the decode latch is invalid
+		if ( !p->ID_latch[lane].valid ) {
+			continue;
+		}
+		if ( !ROB_check_space(p->pipe_ROB) ) {
+			// ROB is full. Have to stall the decode stage (?)
+			// p->ID_latch[lane].stall = true;
+			// Decode stage will stall because latch will be full (valid)
+			continue;
+		}
+
+		Inst_Info inst = p->ID_latch[lane].inst;
+
+		int src1_map = RAT_get_remap(p->pipe_RAT, inst.src1_reg);
+		if ( src1_map < 0 ) {
+			// When there is no existing remapped name, then assume data is present in ARF
+			inst.src1_ready = true;
+		} else {
+			// Get the ready bit from remapped ROB entry
+			inst.src1_ready = p->pipe_ROB->ROB_Entries[src1_map].ready;
+		}
+		// tag always set to the remap return, even if ready or not needed (-1)
+		inst.src1_tag = src1_map;
+
+		int src2_map = RAT_get_remap(p->pipe_RAT, inst.src2_reg);
+		if ( src2_map < 0 ) {
+			// When there is no existing remapped name, then assume data is present in ARF
+			inst.src2_ready = true;
+		} else {
+			// Get the ready bit from remapped ROB entry
+			inst.src2_ready = p->pipe_ROB->ROB_Entries[src2_map].ready;
+		}
+		// tag always set to the remap return, even if ready or not needed (-1)
+		inst.src2_tag = src2_map;
+
+		// Insert the instruction into free space in ROB, save dest tag
+		int rob_tag = ROB_insert(p->pipe_ROB, inst);
+
+		// And rename the destination register to rob tag
+		RAT_set_remap(p->pipe_RAT, inst.dest_reg, rob_tag);
+		p->pipe_ROB->ROB_Entries[rob_tag].inst.dr_tag = rob_tag;
+
+		p->ID_latch[lane].valid = false; // "Removes" the inst from the latch
+	}
 }
 
 //--------------------------------------------------------------------//
@@ -302,12 +359,62 @@ void pipe_cycle_schedule(Pipeline *p) {
 		// inorder scheduling
 		// Find all valid entries, if oldest is stalled then stop
 		// Else mark it as ready to execute and send to SC_latch
+
+		// Start out search for ready instructions at ROB head (oldest instruction)
+		// Remember progress while looping over pipeline lanes
+		int tag = p->pipe_ROB->head_ptr;
+
+		// Try to fill SC_Latch for each lane of the pipeline
+		for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+
+			// Starting at the oldest, search for an eligible instruction
+			for ( ; tag < NUM_ROB_ENTRIES; tag++ ) {
+				if ( !p->pipe_ROB->ROB_Entries[tag].valid )
+					break;
+
+				// Skip over instructions currently executing, might be case for superscalar
+				if ( p->pipe_ROB->ROB_Entries[tag].exec )
+					continue;
+
+				// src1 and src2 must be ready in order to execute
+				if ( !p->pipe_ROB->ROB_Entries[tag].inst.src1_ready ||
+				     !p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
+					break;
+				}
+
+				// Set this entry as executing, and fill the next schedule latch
+				p->pipe_ROB->ROB_Entries[tag].exec = true;
+				p->SC_latch[lane].inst = p->pipe_ROB->ROB_Entries[tag].inst;
+				p->SC_latch[lane].valid = true;
+
+				tag++; // need to manually increment the counter...
+				break; // so search resumes on correct entry (break skips update action)
+			}
+		}
 	}
 
 	if ( SCHED_POLICY == 1 ) {
 		// out of order scheduling
 		// Find valid + src1ready + src2ready + !exec entries in ROB
 		// Mark ROB entry as ready to execute  and transfer instruction to SC_latch
+
+		/* for ( int tag = 0; tag < NUM_ROB_ENTRIES; tag++ ) {
+		    // Skip empty (invalid) and already executed instructions
+		    if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
+		        continue;
+		    }
+		    if ( p->pipe_ROB->ROB_Entries[tag].exec ) {
+		        continue;
+		    }
+
+		    if ( p->pipe_ROB->ROB_Entries[tag].inst.src1_ready &&
+		         p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
+		                p->pipe_ROB->ROB_Entries[tag].exec = true;
+		                p->SC_latch[??]
+		    }
+		}
+
+		ROB_mark_exec(p->pipe_ROB, inst) */
 	}
 }
 
@@ -315,32 +422,59 @@ void pipe_cycle_schedule(Pipeline *p) {
 
 void pipe_cycle_writeback(Pipeline *p) {
 
+	for ( int lane = 0; lane < MAX_WRITEBACKS; lane++ ) {
+		// Skip invalid (empty) latches
+		if ( !p->EX_latch[lane].valid ) {
+			continue;
+		}
+
+		// Set this instruction as ready
+		// Also broadcasts results to other waiting entries
+		ROB_mark_ready(p->pipe_ROB, p->EX_latch[lane].inst);
+
+		// Remove the instruction from this latch (needed)?
+		p->EX_latch[lane].valid = false;
+	}
+
 	// TODO: Go through all instructions out of EXE latch
 	// TODO: Writeback to ROB (using wakeup function)
 	// TODO: Update the ROB, mark ready, and update Inst Info in ROB
+	// * (What inst info needs updating here? just the part covered in writeback?)
 }
 
 //--------------------------------------------------------------------//
 
 void pipe_cycle_commit(Pipeline *p) {
-	int ii = 0;
 
 	// TODO: check the head of the ROB. If ready commit (update stats)
 	// TODO: Deallocate entry from ROB
 	// TODO: Update RAT after checking if the mapping is still relevant
 	// TODO: Flush pipeline when exception is found
 
-	// DUMMY CODE (for compiling, and ensuring simulation terminates!)
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		if ( p->FE_latch[ii].valid ) {
-			if ( p->FE_latch[ii].inst.inst_num >= p->halt_inst_num ) {
-				p->halt = true;
-			} else {
-				p->stat_retired_inst++;
-				p->FE_latch[ii].valid = false;
-			}
+	if ( ROB_check_head(p->pipe_ROB) ) {
+		Inst_Info commited = ROB_remove_head(p->pipe_ROB);
+		p->stat_retired_inst++;
+		if ( commited.inst_num >= p->halt_inst_num ) {
+			p->halt = true;
+		}
+		// Reset the RAT entry for this rename, because data is in ARF now
+		if ( RAT_get_remap(p->pipe_RAT, commited.dest_reg) == commited.dr_tag ) {
+			RAT_reset_entry(p->pipe_RAT, commited.dest_reg);
 		}
 	}
+
+	// DUMMY CODE (for compiling, and ensuring simulation terminates!)
+	// int ii = 0;
+	// for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
+	// 	if ( p->FE_latch[ii].valid ) {
+	// 		if ( p->FE_latch[ii].inst.inst_num >= p->halt_inst_num ) {
+	// 			p->halt = true;
+	// 		} else {
+	// 			p->stat_retired_inst++;
+	// 			p->FE_latch[ii].valid = false;
+	// 		}
+	// 	}
+	// }
 }
 
 //--------------------------------------------------------------------//

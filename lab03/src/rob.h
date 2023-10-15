@@ -8,10 +8,10 @@
 #define MAX_ROB_ENTRIES 256
 
 typedef struct ROB_Entry_Struct {
-	bool valid;
-	bool exec;
-	bool ready;
-	Inst_Info inst; // tags and ready bits, see trace.h
+	bool valid;		// entry is populated
+	bool exec;		// all sources are ready, can be executed
+	bool ready;		// destination ready
+	Inst_Info inst;	// tags and ready bits, see trace.h
 } ROB_Entry;
 
 /////////////////////////////////////////////////////////////

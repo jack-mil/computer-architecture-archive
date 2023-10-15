@@ -4,16 +4,16 @@
 
 // Feel free to add any structs or functions you deem necessary
 
-typedef struct cache {
+typedef struct Cache {
 	int lookups;
 	int hits;
 
-} cache;
+} Cache;
 
 // Feel free to modify the arguments of the functions
-cache *init_cache(void);
-int cache_lookup(cache *c, uint64_t addr, int write);
-void cache_insert(cache *c, uint64_t addr);
-void cache_remove_lru(cache *c);
-void updateLRU(cache *c);
+Cache *init_cache(void);
+int cache_lookup(Cache *c, uint64_t addr, int write);
+void cache_insert(Cache *c, uint64_t addr);
+void cache_remove_lru(Cache *c);
+void updateLRU(Cache *c);
 #endif

@@ -35,22 +35,37 @@ void RAT_print_state(RAT *t) {
 
 /*
  * The RAT will return which ROB entry (PRF_ID) maps to arf_id.
- * Return -1 if the entry is invalid.
+ * Return -1 if the entry is invalid (not remapped).
  */
-
 int RAT_get_remap(RAT *t, int arf_id) {
 
-	if ( t->RAT_Entries[arf_id].valid ) {
-		return t->RAT_Entries[arf_id].prf_id;
-	} else {
+	// Error state if arf_id is out of range
+	// this can occur if src is not needed
+	if ( arf_id < 0 || arf_id >= MAX_ARF_REGS ) {
 		return -1;
 	}
+
+	// Return the renamed ROB tag where data can be found
+	if ( t->RAT_Entries[arf_id].valid ) {
+		return t->RAT_Entries[arf_id].prf_id;
+	}
+	// If a entry is invalid, the register is not renamed,
+	// and value is present in the ARF
+	return -1;
 }
 
-/* For destination regs, remap ARF to PRF (ROB tag) */
+/* For destination regs, remap ARF to PRF (ROB tag)
+ * Fails silently if arf_id is out of range (-1)
+ */
 void RAT_set_remap(RAT *t, int arf_id, int prf_id) {
-	t->RAT_Entries[arf_id].valid = true;
+	// Error state if arf_id is out of range
+	// this can occur if dst is not needed
+	if ( arf_id < 0 || arf_id >= MAX_ARF_REGS ) {
+		// Fail silently
+		return;
+	}
 	t->RAT_Entries[arf_id].prf_id = prf_id;
+	t->RAT_Entries[arf_id].valid = true;
 }
 
 /* On commit, invalidate (reset) RAT information for a particular entry */

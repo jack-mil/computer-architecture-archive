@@ -28,7 +28,7 @@ typedef struct EXEQ {
 EXEQ *EXEQ_init(void);
 void EXEQ_print_state(EXEQ *t);
 void EXEQ_cycle(EXEQ *t);
-void EXEQ_insert(EXEQ *t, Inst_Info inst, cache *c);
+void EXEQ_insert(EXEQ *t, Inst_Info inst, Cache *c);
 bool EXEQ_check_done(EXEQ *t);
 Inst_Info EXEQ_remove(EXEQ *t);
 void EXEQ_flush(EXEQ *t);

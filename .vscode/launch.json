@@ -52,6 +52,30 @@
                     "ignoreFailures": true
                 }
             ]
+        },{
+            "name": "Lab03 Debug (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/lab03/src/sim",
+            "args": ["-pipewidth", "1", "-enablememfwd", "-schedpolicy", "0", "../traces/sml.ptr.gz"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/lab03/src/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "Lab 03 Make",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
         }
 
     ]
