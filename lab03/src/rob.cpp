@@ -71,12 +71,9 @@ int ROB_insert(ROB *t, Inst_Info inst) {
 	return rob_tag;
 }
 
-/////////////////////////////////////////////////////////////
-// When an inst gets scheduled for execution, mark exec
-/////////////////////////////////////////////////////////////
-
+/* When an inst gets scheduled for execution, find the ROB entry and mark exec */
 void ROB_mark_exec(ROB *t, Inst_Info inst) {
-	// Need to search for the entry? Why not
+	// Need to search for the entry?
 	for ( int i = 0; i < NUM_ROB_ENTRIES; i++ ) {
 		if ( t->ROB_Entries[i].valid && t->ROB_Entries[i].inst.inst_num == inst.inst_num ) {
 			t->ROB_Entries[i].exec = true;
@@ -99,27 +96,29 @@ void ROB_mark_ready(ROB *t, Inst_Info inst) {
 		if ( t->ROB_Entries[tag].inst.inst_num == inst.inst_num ) {
 			t->ROB_Entries[tag].ready = true;
 			// Broadcast to other instructions that this one is ready
-			ROB_wakeup(t, tag);
+			// (if destination is used/needed)
+			if (t->ROB_Entries[tag].inst.dest_reg >= 0) {
+				ROB_wakeup(t, tag);
+			}
 			// Quit searching now (should only be one result)
 			return;
 		}
 	}
 }
 
-/////////////////////////////////////////////////////////////
-// Find whether the prf (rob entry) is ready
-
+/* Return whether the prf (rob entry) is ready for commit */
 bool ROB_check_ready(ROB *t, int tag) {
-	return t->ROB_Entries[tag].ready;
+	if ( t->ROB_Entries[tag].valid )
+		return t->ROB_Entries[tag].ready;
+	return false;
 }
 
 /* Check if the oldest ROB entry is ready for commit
  * (valid and ready bits set)
  */
 bool ROB_check_head(ROB *t) {
-	if ( t->ROB_Entries[t->head_ptr].valid ) {
+	if ( t->ROB_Entries[t->head_ptr].valid )
 		return t->ROB_Entries[t->head_ptr].ready;
-	}
 	// Should never happen
 	return false;
 }

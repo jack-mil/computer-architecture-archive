@@ -339,8 +339,10 @@ void pipe_cycle_issue(Pipeline *p) {
 		int rob_tag = ROB_insert(p->pipe_ROB, inst);
 
 		// And rename the destination register to rob tag
-		RAT_set_remap(p->pipe_RAT, inst.dest_reg, rob_tag);
-		p->pipe_ROB->ROB_Entries[rob_tag].inst.dr_tag = rob_tag;
+		if(inst.dest_reg >= 0){
+			RAT_set_remap(p->pipe_RAT, inst.dest_reg, rob_tag);
+			p->pipe_ROB->ROB_Entries[rob_tag].inst.dr_tag = rob_tag;
+		}
 
 		p->ID_latch[lane].valid = false; // "Removes" the inst from the latch
 	}
@@ -362,15 +364,18 @@ void pipe_cycle_schedule(Pipeline *p) {
 
 		// Start out search for ready instructions at ROB head (oldest instruction)
 		// Remember progress while looping over pipeline lanes
-		int tag = p->pipe_ROB->head_ptr;
+		int tag;
 
 		// Try to fill SC_Latch for each lane of the pipeline
 		for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 
 			// Starting at the oldest, search for an eligible instruction
-			for ( ; tag < NUM_ROB_ENTRIES; tag++ ) {
-				if ( !p->pipe_ROB->ROB_Entries[tag].valid )
+			for ( tag = p->pipe_ROB->head_ptr; tag < NUM_ROB_ENTRIES; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
+				// Quit search immediately if head (oldest instruction) is not valid
+				if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
+					p->SC_latch[lane].valid = false;
 					break;
+				}
 
 				// Skip over instructions currently executing, might be case for superscalar
 				if ( p->pipe_ROB->ROB_Entries[tag].exec )
@@ -379,6 +384,7 @@ void pipe_cycle_schedule(Pipeline *p) {
 				// src1 and src2 must be ready in order to execute
 				if ( !p->pipe_ROB->ROB_Entries[tag].inst.src1_ready ||
 				     !p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
+					p->SC_latch[lane].valid = false; // Insert a bubble (stall) this lane
 					break;
 				}
 
@@ -387,9 +393,11 @@ void pipe_cycle_schedule(Pipeline *p) {
 				p->SC_latch[lane].inst = p->pipe_ROB->ROB_Entries[tag].inst;
 				p->SC_latch[lane].valid = true;
 
-				tag++; // need to manually increment the counter...
-				break; // so search resumes on correct entry (break skips update action)
+				// tag = (tag + 1) % NUM_ROB_ENTRIES; // need to manually increment the counter...
+				break;                             // so search resumes on correct entry (break skips update action)
 			}
+
+			// Try to fill next lane of superscalar
 		}
 	}
 
@@ -458,7 +466,7 @@ void pipe_cycle_commit(Pipeline *p) {
 			p->halt = true;
 		}
 		// Reset the RAT entry for this rename, because data is in ARF now
-		if ( RAT_get_remap(p->pipe_RAT, commited.dest_reg) == commited.dr_tag ) {
+		if ( commited.dest_reg >= 0 && RAT_get_remap(p->pipe_RAT, commited.dest_reg) == commited.dr_tag ) {
 			RAT_reset_entry(p->pipe_RAT, commited.dest_reg);
 		}
 	}
