@@ -119,7 +119,7 @@ bool ROB_check_ready(ROB *t, int tag) {
 bool ROB_check_head(ROB *t) {
 	if ( t->ROB_Entries[t->head_ptr].valid )
 		return t->ROB_Entries[t->head_ptr].ready;
-	// Should never happen
+	// If the head is not valid, then the ROB is empty
 	return false;
 }
 

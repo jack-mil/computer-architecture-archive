@@ -199,7 +199,7 @@ void pipe_cycle_exe(Pipeline *p) {
 
 	int ii;
 
-	//---------Handling exe for multicycle operations is complex, and uses EXEQ
+	//---------Handling exe for multi-cycle operations is complex, and uses EXEQ
 
 	// All valid entries from SC get into exeq
 
@@ -292,14 +292,12 @@ void pipe_cycle_decode(Pipeline *p) {
 
 void pipe_cycle_issue(Pipeline *p) {
 
-	// insert new instruction(s) into ROB (rename)
-	// every cycle up to PIPEWIDTH instructions issued
-
 	// TODO: Find space in ROB and transfer instruction (valid = 1, exec = 0, ready = 0)
 	// TODO: If src1/src2 is not remapped, set src1ready/src2ready
 	// TODO: If src1/src2 is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
 	// TODO: Set dr_tag
 
+	// every cycle up to PIPEWIDTH instructions issued
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 		// Skip this lane if the decode latch is invalid
 		if ( !p->ID_latch[lane].valid ) {
@@ -340,7 +338,7 @@ void pipe_cycle_issue(Pipeline *p) {
 		int rob_tag = ROB_insert(p->pipe_ROB, inst);
 
 		// And rename the destination register to rob tag
-		if(inst.dest_reg >= 0){
+		if ( inst.dest_reg >= 0 ) {
 			RAT_set_remap(p->pipe_RAT, inst.dest_reg, rob_tag);
 			p->pipe_ROB->ROB_Entries[rob_tag].inst.dr_tag = rob_tag;
 		}
@@ -351,79 +349,65 @@ void pipe_cycle_issue(Pipeline *p) {
 
 //--------------------------------------------------------------------//
 
+/* Select instructions from the ROB to execute.
+Every cycle up to PIPEWIDTH instructions are scheduled
+*/
 void pipe_cycle_schedule(Pipeline *p) {
 
-	// select instruction(s) to Execute
-	// every cycle up to PIPEWIDTH instructions scheduled
+	// TWO possible Policies: In-Order and Out-of-Order
+	// In-Order scheduling (SCHED_POLICY=0)
+	//  - Find the oldest instruction in ROB (head)
+	//    - If not ready, then stall pipeline(s) (valid, src1/2_ready, & !exec)
+	//  - Otherwise, schedule it and check next oldest for next lane
+	// -----------------------------------------------------------------------------
+	// Out-of-Order scheduling (SCHED_POLICY=1)
+	//  - Go through ROB entries in-order, scheduling any that are ready for execute
 
-	// TODO: Implement two scheduling policies (SCHED_POLICY: 0 and 1)
+	// Start out search for ready instructions at ROB head (oldest instruction)
+	// Remember progress while looping over pipeline lanes
+	int tag = p->pipe_ROB->head_ptr;
 
-	if ( SCHED_POLICY == 0 ) {
-		// inorder scheduling
-		// Find all valid entries, if oldest is stalled then stop
-		// Else mark it as ready to execute and send to SC_latch
+	// Try to fill SC_Latch for each lane of the pipeline
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 
-		// Start out search for ready instructions at ROB head (oldest instruction)
-		// Remember progress while looping over pipeline lanes
-		int tag;
-
-		// Try to fill SC_Latch for each lane of the pipeline
-		for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
-
-			// Starting at the oldest, search for an eligible instruction
-			for ( tag = p->pipe_ROB->head_ptr; tag < NUM_ROB_ENTRIES; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
-				// Quit search immediately if head (oldest instruction) is not valid
-				if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
-					p->SC_latch[lane].valid = false;
-					break;
-				}
-
-				// Skip over instructions currently executing, might be case for superscalar
-				if ( p->pipe_ROB->ROB_Entries[tag].exec )
-					continue;
-
-				// src1 and src2 must be ready in order to execute
-				if ( !p->pipe_ROB->ROB_Entries[tag].inst.src1_ready ||
-				     !p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
-					p->SC_latch[lane].valid = false; // Insert a bubble (stall) this lane
-					break;
-				}
-
-				// Set this entry as executing, and fill the next schedule latch
-				p->pipe_ROB->ROB_Entries[tag].exec = true;
-				p->SC_latch[lane].inst = p->pipe_ROB->ROB_Entries[tag].inst;
-				p->SC_latch[lane].valid = true;
-
-				// tag = (tag + 1) % NUM_ROB_ENTRIES; // need to manually increment the counter...
-				break;                             // so search resumes on correct entry (break skips update action)
+		// Starting at the oldest, search for an eligible instruction (circular)
+		// This is a pretty unconventional "for" loop.
+		for ( ; tag < NUM_ROB_ENTRIES; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
+			// Quit search immediately if entry is not valid
+			// Indicates reached end of ROB (or ROB full/empty)
+			if ( !p->pipe_ROB->ROB_Entries[tag].valid) {
+				// p->SC_latch[lane].valid = false;
+				break;
 			}
 
-			// Try to fill next lane of superscalar
+			// Skip over instructions already seen and marked executing
+			//  might be case for superscalar
+			if ( p->pipe_ROB->ROB_Entries[tag].exec )
+				continue;
+
+			// src1 and src2 must be ready in order to execute
+			if ( !p->pipe_ROB->ROB_Entries[tag].inst.src1_ready ||
+			     !p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
+				// Behaviour when encountering a stalled instruction is the only difference
+				// between scheduling policies.
+				if ( SCHED_POLICY == 0 ) {
+					p->SC_latch[lane].valid = false; // Insert a bubble (stall) this lane
+					break;
+				} else {
+					continue;
+				}
+			}
+
+			// Set this entry as executing, and fill the next schedule latch
+			p->pipe_ROB->ROB_Entries[tag].exec = true;
+			p->SC_latch[lane].inst = p->pipe_ROB->ROB_Entries[tag].inst;
+			p->SC_latch[lane].valid = true;
+
+			tag = (tag + 1) % NUM_ROB_ENTRIES; // need to manually increment the counter...
+			break; // so search resumes on correct entry (break skips update action)
 		}
-	}
 
-	if ( SCHED_POLICY == 1 ) {
-		// out of order scheduling
-		// Find valid + src1ready + src2ready + !exec entries in ROB
-		// Mark ROB entry as ready to execute  and transfer instruction to SC_latch
-
-		/* for ( int tag = 0; tag < NUM_ROB_ENTRIES; tag++ ) {
-		    // Skip empty (invalid) and already executed instructions
-		    if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
-		        continue;
-		    }
-		    if ( p->pipe_ROB->ROB_Entries[tag].exec ) {
-		        continue;
-		    }
-
-		    if ( p->pipe_ROB->ROB_Entries[tag].inst.src1_ready &&
-		         p->pipe_ROB->ROB_Entries[tag].inst.src2_ready ) {
-		                p->pipe_ROB->ROB_Entries[tag].exec = true;
-		                p->SC_latch[??]
-		    }
-		}
-
-		ROB_mark_exec(p->pipe_ROB, inst) */
+		// Try to fill next lane of superscalar
 	}
 }
 
