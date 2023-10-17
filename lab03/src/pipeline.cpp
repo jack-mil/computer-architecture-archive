@@ -258,9 +258,6 @@ void pipe_cycle_fetch(Pipeline *p) {
 //--------------------------------------------------------------------//
 
 void pipe_cycle_decode(Pipeline *p) {
-	int ii = 0;
-
-	int jj = 0;
 
 	// Static means this variable will keep value
 	// across function calls. Ensures that all instructions
@@ -268,21 +265,25 @@ void pipe_cycle_decode(Pipeline *p) {
 	static uint64_t start_inst_id = 1;
 
 	// Loop Over ID Latch
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		if ( (p->ID_latch[ii].stall == 1) || (p->ID_latch[ii].valid) ) { // Stall
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		if ( (p->ID_latch[lane].stall == 1) || (p->ID_latch[lane].valid) ) { // Stall
 			continue;
-		} else {                                    // No Stall & there is Space in Latch
-			for ( jj = 0; jj < PIPE_WIDTH; jj++ ) { // Loop Over FE Latch
-				if ( p->FE_latch[jj].valid ) {
-					if ( p->FE_latch[jj].inst.inst_num == start_inst_id ) { // In Order Inst Found
-						p->ID_latch[ii] = p->FE_latch[jj];
-						p->ID_latch[ii].valid = true;
-						p->FE_latch[jj].valid = false;
-						start_inst_id++;
-						break;
-					}
-				}
+		}
+		// No Stall & there is Space in Latch
+		for ( int jj = 0; jj < PIPE_WIDTH; jj++ ) {
+			// Loop over all full FE Latches
+			if ( !p->FE_latch[jj].valid ) {
+				continue;
 			}
+			// Find the next in order instruction
+			if ( p->FE_latch[jj].inst.inst_num != start_inst_id ) {
+				continue;
+			}
+			p->ID_latch[lane] = p->FE_latch[jj];
+			p->ID_latch[lane].valid = true;
+			p->FE_latch[jj].valid = false;
+			start_inst_id++; // Increment the static counter. Persists across function calls
+			break;
 		}
 	}
 }
@@ -454,35 +455,31 @@ void pipe_cycle_writeback(Pipeline *p) {
 
 void pipe_cycle_commit(Pipeline *p) {
 
-	// TODO: check the head of the ROB. If ready commit (update stats)
-	// TODO: Deallocate entry from ROB
-	// TODO: Update RAT after checking if the mapping is still relevant
 	// TODO: Flush pipeline when exception is found
 
-	if ( ROB_check_head(p->pipe_ROB) ) {
-		Inst_Info commited = ROB_remove_head(p->pipe_ROB);
-		p->stat_retired_inst++;
-		if ( commited.inst_num >= p->halt_inst_num ) {
-			p->halt = true;
+	// Can commit upto PIPE_WIDTH instructions per cycle
+	for ( int i = 0; i < PIPE_WIDTH; i++ ) {
+
+		// Ensure that the ROB contains a instruction ready to commit
+		if ( !ROB_check_head(p->pipe_ROB) ) {
+			break;
 		}
+
+		// Deallocate and free space in the ROB, increments head_ptr
+		Inst_Info commited = ROB_remove_head(p->pipe_ROB);
+
+		// Instruction is now considered 'commited'
+		p->stat_retired_inst++;
+
 		// Reset the RAT entry for this rename, because data is in ARF now
 		if ( commited.dest_reg >= 0 && RAT_get_remap(p->pipe_RAT, commited.dest_reg) == commited.dr_tag ) {
 			RAT_reset_entry(p->pipe_RAT, commited.dest_reg);
 		}
+
+		// If this was the last instruction, set the halt condition
+		if ( commited.inst_num >= p->halt_inst_num ) {
+			p->halt = true;
+			break;
+		}
 	}
-
-	// DUMMY CODE (for compiling, and ensuring simulation terminates!)
-	// int ii = 0;
-	// for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-	// 	if ( p->FE_latch[ii].valid ) {
-	// 		if ( p->FE_latch[ii].inst.inst_num >= p->halt_inst_num ) {
-	// 			p->halt = true;
-	// 		} else {
-	// 			p->stat_retired_inst++;
-	// 			p->FE_latch[ii].valid = false;
-	// 		}
-	// 	}
-	// }
 }
-
-//--------------------------------------------------------------------//
