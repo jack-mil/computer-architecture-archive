@@ -233,25 +233,24 @@ void pipe_cycle_exe(Pipeline *p) {
  **********************************************************************/
 
 void pipe_cycle_fetch(Pipeline *p) {
-	int ii = 0;
 	Pipe_Latch fetch_latch;
 
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		if ( (p->FE_latch[ii].stall) || (p->FE_latch[ii].valid) ) { // Stall
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		if ( p->FE_latch[lane].stall || p->FE_latch[lane].valid ) {
+			// Stall if FE latch is currently full
+			// stall flag not really used
 			continue;
-
 		}
 
 		// TODO: Conditional Logic for Exception Handling
 
-		else { // No Stall and Latch Empty
-			pipe_fetch_inst(p, &fetch_latch);
+		// Get a new instruction into the latch
+		pipe_fetch_inst(p, &fetch_latch);
 
-			if ( EXCEPTIONS ) {
-			}
-			// copy the op in FE LATCH
-			p->FE_latch[ii] = fetch_latch;
+		if ( EXCEPTIONS ) {
 		}
+		// copy the op in FE LATCH
+		p->FE_latch[lane] = fetch_latch;
 	}
 }
 
@@ -266,7 +265,9 @@ void pipe_cycle_decode(Pipeline *p) {
 
 	// Loop Over ID Latch
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
-		if ( (p->ID_latch[lane].stall == 1) || (p->ID_latch[lane].valid) ) { // Stall
+		if ( p->ID_latch[lane].stall || p->ID_latch[lane].valid ) {
+			// Stall if ID latch is currently full
+			// p->ID_latch[lane].stall = false; 		// Stall flag not actually used
 			continue;
 		}
 		// No Stall & there is Space in Latch
@@ -279,6 +280,7 @@ void pipe_cycle_decode(Pipeline *p) {
 			if ( p->FE_latch[jj].inst.inst_num != start_inst_id ) {
 				continue;
 			}
+			// Fill the current ID latch and empty FE latch.
 			p->ID_latch[lane] = p->FE_latch[jj];
 			p->ID_latch[lane].valid = true;
 			p->FE_latch[jj].valid = false;
@@ -290,28 +292,26 @@ void pipe_cycle_decode(Pipeline *p) {
 
 //--------------------------------------------------------------------//
 
+/* Consume instructions from the ID_latch(es) and insert into free space in ROB.
+ * Check src registers for present or remapped values
+ * Rename the destination register and add a RAT entry (if required)
+ */
 void pipe_cycle_issue(Pipeline *p) {
-
-	// TODO: Find space in ROB and transfer instruction (valid = 1, exec = 0, ready = 0)
-	// TODO: If src1/src2 is not remapped, set src1ready/src2ready
-	// TODO: If src1/src2 is remapped, set src1tag/src2tag from RAT. Set src1ready/src2ready based on ready bit from ROB entries.
-	// TODO: Set dr_tag
 
 	// every cycle up to PIPEWIDTH instructions issued
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
-		// Skip this lane if the decode latch is invalid
+		// Skip this lane if the decode latch is invalid (empty)
 		if ( !p->ID_latch[lane].valid ) {
 			continue;
 		}
 		if ( !ROB_check_space(p->pipe_ROB) ) {
-			// ROB is full. Have to stall the decode stage (?)
-			// p->ID_latch[lane].stall = true;
-			// Decode stage will stall because latch will be full (valid)
+			// ROB is full. Decode stage will stall because latch remains full (valid)
 			continue;
 		}
 
 		Inst_Info inst = p->ID_latch[lane].inst;
 
+		// Check for src1 rename present
 		int src1_map = RAT_get_remap(p->pipe_RAT, inst.src1_reg);
 		if ( src1_map < 0 ) {
 			// When there is no existing remapped name, then assume data is present in ARF
@@ -323,6 +323,7 @@ void pipe_cycle_issue(Pipeline *p) {
 		// tag always set to the remap return, even if ready or not needed (-1)
 		inst.src1_tag = src1_map;
 
+		// Check for src2 rename present
 		int src2_map = RAT_get_remap(p->pipe_RAT, inst.src2_reg);
 		if ( src2_map < 0 ) {
 			// When there is no existing remapped name, then assume data is present in ARF
@@ -343,15 +344,15 @@ void pipe_cycle_issue(Pipeline *p) {
 			p->pipe_ROB->ROB_Entries[rob_tag].inst.dr_tag = rob_tag;
 		}
 
-		p->ID_latch[lane].valid = false; // "Removes" the inst from the latch
+		p->ID_latch[lane].valid = false; // "Removes" the inst from the latch+
 	}
 }
 
 //--------------------------------------------------------------------//
 
 /* Select instructions from the ROB to execute.
-Every cycle up to PIPEWIDTH instructions are scheduled
-*/
+ * Every cycle up to PIPEWIDTH instructions are scheduled
+ */
 void pipe_cycle_schedule(Pipeline *p) {
 
 	// TWO possible Policies: In-Order and Out-of-Order
@@ -371,11 +372,11 @@ void pipe_cycle_schedule(Pipeline *p) {
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 
 		// Starting at the oldest, search for an eligible instruction (circular)
-		// This is a pretty unconventional "for" loop.
+		// This is a pretty unconventional "for" loop. Maybe use while(true)?
 		for ( ; tag < NUM_ROB_ENTRIES; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
 			// Quit search immediately if entry is not valid
 			// Indicates reached end of ROB (or ROB full/empty)
-			if ( !p->pipe_ROB->ROB_Entries[tag].valid) {
+			if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
 				// p->SC_latch[lane].valid = false;
 				break;
 			}
@@ -404,7 +405,7 @@ void pipe_cycle_schedule(Pipeline *p) {
 			p->SC_latch[lane].valid = true;
 
 			tag = (tag + 1) % NUM_ROB_ENTRIES; // need to manually increment the counter...
-			break; // so search resumes on correct entry (break skips update action)
+			break;                             // so search resumes on correct entry (break skips update action)
 		}
 
 		// Try to fill next lane of superscalar
@@ -413,6 +414,7 @@ void pipe_cycle_schedule(Pipeline *p) {
 
 //--------------------------------------------------------------------//
 
+/* Writeback many instructions as they finish executing fromthe EX_latch */
 void pipe_cycle_writeback(Pipeline *p) {
 
 	for ( int lane = 0; lane < MAX_WRITEBACKS; lane++ ) {
@@ -428,11 +430,6 @@ void pipe_cycle_writeback(Pipeline *p) {
 		// Remove the instruction from this latch (needed)?
 		p->EX_latch[lane].valid = false;
 	}
-
-	// TODO: Go through all instructions out of EXE latch
-	// TODO: Writeback to ROB (using wakeup function)
-	// TODO: Update the ROB, mark ready, and update Inst Info in ROB
-	// * (What inst info needs updating here? just the part covered in writeback?)
 }
 
 //--------------------------------------------------------------------//
