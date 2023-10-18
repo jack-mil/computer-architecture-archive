@@ -60,11 +60,11 @@ void EXEQ_insert(EXEQ *t, Inst_Info inst, Cache *c) {
 
 			if ( CACHE ) {
 				if ( t->EXEQ_Entries[ii].inst.op_type == OP_LD ) {
-					t->EXEQ_Entries[ii].inst.exe_wait_cycles = cache_lookup(c, inst.mem_addr, 0);
+					t->EXEQ_Entries[ii].inst.exe_wait_cycles = cache_lookup(c, inst.mem_addr, false);
 				}
 
 				if ( t->EXEQ_Entries[ii].inst.op_type == OP_ST ) {
-					t->EXEQ_Entries[ii].inst.exe_wait_cycles = cache_lookup(c, inst.mem_addr, 1);
+					t->EXEQ_Entries[ii].inst.exe_wait_cycles = cache_lookup(c, inst.mem_addr, true);
 				}
 			} else {
 				if ( t->EXEQ_Entries[ii].inst.op_type == OP_LD ) {
