@@ -372,12 +372,12 @@ void pipe_cycle_schedule(Pipeline *p) {
 	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
 
 		// Starting at the oldest, search for an eligible instruction (circular)
-		// This is a pretty unconventional "for" loop. Maybe use while(true)?
-		for ( ; tag < NUM_ROB_ENTRIES; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
+		// This is a pretty unconventional "for" loop. Maybe use while()?
+		// Stop searching after one full revolution. increment with modulo as circular queue
+		for ( ; ((tag + 1) % NUM_ROB_ENTRIES) != p->pipe_ROB->head_ptr; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
 			// Quit search immediately if entry is not valid
-			// Indicates reached end of ROB (or ROB full/empty)
+			// Indicates reached end of ROB (or ROB empty)
 			if ( !p->pipe_ROB->ROB_Entries[tag].valid ) {
-				// p->SC_latch[lane].valid = false;
 				break;
 			}
 
