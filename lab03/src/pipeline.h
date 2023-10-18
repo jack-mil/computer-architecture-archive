@@ -44,7 +44,7 @@ typedef struct Pipeline {
 
 	ROB *pipe_ROB;
 	RAT *pipe_RAT;
-	EXEQ *pipe_EXEQ; // execution Q for multicycle ops (students need not implement this object)
+	EXEQ *pipe_EXEQ; // execution Q for multi-cycle ops (students need not implement this object)
 
 	uint64_t inst_num_tracker; // sequence number for inst
 	uint64_t halt_inst_num;    // last inst in Trace

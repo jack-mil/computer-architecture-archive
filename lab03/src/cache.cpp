@@ -17,7 +17,7 @@ uint32_t MISS_LATENCY = 20; //
 
 /*
 init_cache initializes the cache data structure and returns a pointer.
-The pointer to the cache data structure is part of the pipeline struct (see pipleine.h)
+The pointer to the cache data structure is part of the pipeline struct (see pipeline.h)
 init_cache is called in pipe_init.
 */
 

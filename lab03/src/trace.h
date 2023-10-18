@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 typedef enum Op_Type_Enum {
-	OP_ALU,   // ALU(ADD/ SUB/ MUL/ DIV) operaiton
+	OP_ALU,   // ALU(ADD/ SUB/ MUL/ DIV) operation
 	OP_LD,    // load operation
 	OP_ST,    // store operation
 	OP_CBR,   // Conditional Branch
@@ -17,7 +17,7 @@ typedef enum Op_Type_Enum {
 /* Data structure for Trace Record */
 typedef struct Trace_Rec_Struct {
 	uint64_t inst_addr;             // instruction address
-	uint8_t op_type;                // optype
+	uint8_t op_type;                // op-type
 	uint8_t dest;                   // Destination
 	uint8_t dest_needed;            //
 	uint8_t src1_reg;               // Source Register 1
@@ -32,13 +32,13 @@ typedef struct Trace_Rec_Struct {
 	uint8_t br_dir;                 // Branch Direction Taken / Not Taken
 	uint64_t br_target;             // Target Address of Branch
 	uint8_t is_exception;           // Will this instruction raise an exception
-	uint8_t exception_handler_cost; // Number of cycles an exception hander takes
+	uint8_t exception_handler_cost; // Number of cycles an exception handler takes
 } Trace_Rec;
 
 /* Data structure for Inst Info Record */
 typedef struct Inst_Info_Struct {
 	uint64_t inst_num; // sequence number for instructions
-	uint8_t op_type;   // optype
+	uint8_t op_type;   // op-type
 	int dest_reg;      // Destination (-1 if not needed)
 	int src1_reg;      // Source 1 reg (-1 if not needed)
 	int src2_reg;      // Source 1 reg (-1 if not needed)
@@ -51,7 +51,7 @@ typedef struct Inst_Info_Struct {
 	bool src2_ready; // true if value ready or not needed
 
 	bool is_exception;              // true if instruction raises an exception
-	int32_t exception_handler_cost; // Number of cycles an exception hander takes
+	int32_t exception_handler_cost; // Number of cycles an exception handler takes
 
 	// needed for multi-cycle execution
 	int exe_wait_cycles; // we will use this for cache lookup
