@@ -3,10 +3,8 @@
 
 #include "cache.h"
 #include "exeq.h"
-/////////////////////////////////////////////////////////////
-// Init function initializes the EXEQ
-/////////////////////////////////////////////////////////////
 
+/* Init function initializes the EXEQ */
 EXEQ *EXEQ_init(void) {
 	int ii;
 	EXEQ *t = (EXEQ *)calloc(1, sizeof(EXEQ));
@@ -16,10 +14,8 @@ EXEQ *EXEQ_init(void) {
 	return t;
 }
 
-/////////////////////////////////////////////////////////////
-// Print State
-/////////////////////////////////////////////////////////////
 
+/* Print State */
 void EXEQ_print_state(EXEQ *t) {
 	int ii = 0;
 	printf("Printing EXEQ \n");
@@ -32,10 +28,8 @@ void EXEQ_print_state(EXEQ *t) {
 	printf("\n");
 }
 
-/////////////////////////////////////////////////////////////
-// Every cycle, all valid EXEQ entries undergo exe_wait--
-/////////////////////////////////////////////////////////////
 
+/*  Every cycle, all valid EXEQ entries get wait time decremented (exe_wait--) */
 void EXEQ_cycle(EXEQ *t) {
 	int ii;
 	for ( ii = 0; ii < MAX_EXEQ_ENTRIES; ii++ ) {
@@ -45,10 +39,8 @@ void EXEQ_cycle(EXEQ *t) {
 	}
 }
 
-/////////////////////////////////////////////////////////////
-// insert entry in EXEQ, exit if no space!
-/////////////////////////////////////////////////////////////
 
+/*  Insert entry in EXEQ, exit if no space! */
 void EXEQ_insert(EXEQ *t, Inst_Info inst, Cache *c) {
 	int ii;
 
@@ -79,10 +71,8 @@ void EXEQ_insert(EXEQ *t, Inst_Info inst, Cache *c) {
 	exit(-1);
 }
 
-/////////////////////////////////////////////////////////////
-// If any EXEQ entry has zero wait time return true, else false
-/////////////////////////////////////////////////////////////
 
+/* If any EXEQ entry has zero wait time return true, else false */
 bool EXEQ_check_done(EXEQ *t) {
 	int ii;
 
@@ -97,10 +87,8 @@ bool EXEQ_check_done(EXEQ *t) {
 	return false;
 }
 
-/////////////////////////////////////////////////////////////
-// Remove any finished entry from the EXEQ (call after check_done)
-/////////////////////////////////////////////////////////////
 
+/* Remove any finished entry from the EXEQ (call after check_done) */
 Inst_Info EXEQ_remove(EXEQ *t) {
 	Inst_Info retval;
 	int ii;
@@ -120,10 +108,8 @@ Inst_Info EXEQ_remove(EXEQ *t) {
 	return retval;
 }
 
-/////////////////////////////////////////////////////////////
-// Remove all entries from the EXEQ
-/////////////////////////////////////////////////////////////
 
+/*  Remove all entries from the EXEQ */
 void EXEQ_flush(EXEQ *t) {
 
 	for ( int ii = 0; ii < MAX_EXEQ_ENTRIES; ii++ ) {
@@ -131,5 +117,3 @@ void EXEQ_flush(EXEQ *t) {
 	}
 }
 
-/////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////

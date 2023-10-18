@@ -190,23 +190,21 @@ void pipe_cycle(Pipeline *p) {
 	pipe_cycle_fetch(p);
 
 	// pipe_print_state(p);
-	// printf("");
 }
 
 //--------------------------------------------------------------------//
 
 void pipe_cycle_exe(Pipeline *p) {
 
-	int ii;
 
 	//---------Handling exe for multi-cycle operations is complex, and uses EXEQ
 
 	// All valid entries from SC get into exeq
 
-	for ( ii = 0; ii < PIPE_WIDTH; ii++ ) {
-		if ( p->SC_latch[ii].valid ) {
-			EXEQ_insert(p->pipe_EXEQ, p->SC_latch[ii].inst, p->pipeline_cache);
-			p->SC_latch[ii].valid = false;
+	for ( int lane = 0; lane < PIPE_WIDTH; lane++ ) {
+		if ( p->SC_latch[lane].valid ) {
+			EXEQ_insert(p->pipe_EXEQ, p->SC_latch[lane].inst, p->pipeline_cache);
+			p->SC_latch[lane].valid = false;
 		}
 	}
 
@@ -216,15 +214,18 @@ void pipe_cycle_exe(Pipeline *p) {
 	// Transfer all finished entries from EXEQ to EX_latch
 	int index = 0;
 
+	// The writeback function called before execute, ensures that the EX_latch is all empty
 	while ( 1 ) {
-		if ( EXEQ_check_done(p->pipe_EXEQ) ) {
-			p->EX_latch[index].valid = true;
-			p->EX_latch[index].stall = false;
-			p->EX_latch[index].inst = EXEQ_remove(p->pipe_EXEQ);
-			index++;
-		} else { // No More Entry in EXEQ
+		// No more entries completed in EXEQ
+		if ( !EXEQ_check_done(p->pipe_EXEQ) ) {
 			break;
 		}
+		// Remove an entry that finished, and insert it into EX_Latch for writeback
+		p->EX_latch[index].valid = true;
+		p->EX_latch[index].stall = false;
+		p->EX_latch[index].inst = EXEQ_remove(p->pipe_EXEQ);
+		// Don't need to check index out of bounds, because EXEQ is smaller than EX_latch
+		index++;
 	}
 }
 
@@ -364,8 +365,13 @@ void pipe_cycle_schedule(Pipeline *p) {
 	// Out-of-Order scheduling (SCHED_POLICY=1)
 	//  - Go through ROB entries in-order, scheduling any that are ready for execute
 
+	// Maybe this algorithm should be integrated into the ROB class API
+	// This implementation is efficient (worst case O(n)) but uses low level
+	// ROB members (head/tail ptr, direct manipulation of entry state, etc)
+
 	// Start out search for ready instructions at ROB head (oldest instruction)
 	// Remember progress while looping over pipeline lanes
+	// Worst case we visit every ROB entry once
 	int tag = p->pipe_ROB->head_ptr;
 
 	// Try to fill SC_Latch for each lane of the pipeline
@@ -373,7 +379,7 @@ void pipe_cycle_schedule(Pipeline *p) {
 
 		// Starting at the oldest, search for an eligible instruction (circular)
 		// This is a pretty unconventional "for" loop. Maybe use while()?
-		// Stop searching after one full revolution. increment with modulo as circular queue
+		// Stop searching after one full revolution. Increment with modulo as circular queue
 		for ( ; ((tag + 1) % NUM_ROB_ENTRIES) != p->pipe_ROB->head_ptr; tag = (tag + 1) % NUM_ROB_ENTRIES ) {
 			// Quit search immediately if entry is not valid
 			// Indicates reached end of ROB (or ROB empty)
@@ -439,6 +445,7 @@ void pipe_cycle_commit(Pipeline *p) {
 	// TODO: Flush pipeline when exception is found
 
 	// Can commit upto PIPE_WIDTH instructions per cycle
+	// Instructions must be commited in order (from the ROB head)
 	for ( int i = 0; i < PIPE_WIDTH; i++ ) {
 
 		// Ensure that the ROB contains a instruction ready to commit
