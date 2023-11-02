@@ -76,6 +76,8 @@ void pipe_fetch_inst(Pipeline *p, Pipe_Latch *fe_latch) {
 		fetch_inst->src1_ready = false;
 		fetch_inst->src2_ready = false;
 		fetch_inst->exe_wait_cycles = 0;
+		fetch_inst->is_exception = trace.is_exception;
+		fetch_inst->exception_handler_cost = trace.is_exception ? trace.exception_handler_cost : 0;
 	} else {
 		fe_latch->valid = false;
 	}
@@ -195,7 +197,6 @@ void pipe_cycle(Pipeline *p) {
 //--------------------------------------------------------------------//
 
 void pipe_cycle_exe(Pipeline *p) {
-
 
 	//---------Handling exe for multi-cycle operations is complex, and uses EXEQ
 
