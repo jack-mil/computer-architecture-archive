@@ -4,8 +4,7 @@
             "label": "Lab 01 Make",
             "type": "shell",
             "command": "g++ -g -Wall -std=c++14 -O3 sim.cpp  -o sim",
-            "args": [
-            ],
+            "args": [],
             "options": {
                 "cwd": "${fileDirname}"
             },
@@ -22,7 +21,8 @@
             "label": "Lab 02 Make",
             "type": "shell",
             "command": "make",
-            "args": [ "all"
+            "args": [
+                "all"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/lab02/src/"
@@ -35,14 +35,35 @@
                 "isDefault": false
             },
             "detail": "Build a project using a local makefile"
-        },{
+        },
+        {
             "label": "Lab 03 Make",
             "type": "shell",
             "command": "make",
-            "args": [ "all"
+            "args": [
+                "all"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/lab03/src/"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "detail": "Build a project using a local makefile"
+        },
+        {
+            "label": "Lab 04 Make",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/lab04/src/"
             },
             "problemMatcher": [
                 "$gcc"

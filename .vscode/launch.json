@@ -9,7 +9,9 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/src/sim",
-            "args": ["../traces/gcc.otr.gz"],
+            "args": [
+                "../traces/gcc.otr.gz"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/src/",
             "environment": [],
@@ -28,12 +30,21 @@
                     "ignoreFailures": true
                 }
             ]
-        },{
+        },
+        {
             "name": "Lab02 Debug (GDB)",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/lab02/src/sim",
-            "args": ["-pipewidth", "2", "-enablememfwd", "-enableexefwd", "-bpredpolicy", "2", "../traces/sml.ptr.gz"],
+            "args": [
+                "-pipewidth",
+                "2",
+                "-enablememfwd",
+                "-enableexefwd",
+                "-bpredpolicy",
+                "2",
+                "../traces/sml.ptr.gz"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/lab02/src/",
             "environment": [],
@@ -52,12 +63,20 @@
                     "ignoreFailures": true
                 }
             ]
-        },{
+        },
+        {
             "name": "Lab03 Debug (GDB)",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/lab03/src/sim",
-            "args": ["-pipewidth", "2", "-schedpolicy", "0", "-cache", "../traces/sml.ptr.gz"],
+            "args": [
+                "-pipewidth",
+                "2",
+                "-schedpolicy",
+                "0",
+                "-cache",
+                "../traces/sml.ptr.gz"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/lab03/src/",
             "environment": [],
@@ -76,7 +95,33 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "Lab04 Debug (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/lab04/src/sim",
+            "args": [
+                ""
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/lab04/src/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "Lab 04 Make",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
         }
-
     ]
 }
