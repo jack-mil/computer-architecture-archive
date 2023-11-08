@@ -1,11 +1,14 @@
-#include <assert.h>
-#include <climits>
+#include "cache.h"
+#include <algorithm>
+// #include <assert.h>
+// #include <climits>
+#include <cmath>
 #include <cstring>
 #include <stdio.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 
-#include "cache.h"
-
+// cursed external reference global in to sim.cpp
+extern uint64_t cycle;
 /////////////////////////////////////////////////////////////////////////////////////
 // ---------------------- DO NOT MODIFY THE PRINT STATS FUNCTION --------------------
 /////////////////////////////////////////////////////////////////////////////////////
@@ -22,13 +25,13 @@ void cache_print_stats(Cache *c, char *header) {
 		write_mr = (double)(c->stat_write_miss) / (double)(c->stat_write_access);
 	}
 
-	printf("\n%s_READ_ACCESS    \t\t : %10llu", header, c->stat_read_access);
-	printf("\n%s_WRITE_ACCESS   \t\t : %10llu", header, c->stat_write_access);
-	printf("\n%s_READ_MISS      \t\t : %10llu", header, c->stat_read_miss);
-	printf("\n%s_WRITE_MISS     \t\t : %10llu", header, c->stat_write_miss);
+	printf("\n%s_READ_ACCESS    \t\t : %10lu", header, c->stat_read_access);
+	printf("\n%s_WRITE_ACCESS   \t\t : %10lu", header, c->stat_write_access);
+	printf("\n%s_READ_MISS      \t\t : %10lu", header, c->stat_read_miss);
+	printf("\n%s_WRITE_MISS     \t\t : %10lu", header, c->stat_write_miss);
 	printf("\n%s_READ_MISS_PERC  \t\t : %10.3f", header, 100 * read_mr);
 	printf("\n%s_WRITE_MISS_PERC \t\t : %10.3f", header, 100 * write_mr);
-	printf("\n%s_DIRTY_EVICTS   \t\t : %10llu", header, c->stat_dirty_evicts);
+	printf("\n%s_DIRTY_EVICTS   \t\t : %10lu", header, c->stat_dirty_evicts);
 	printf("\n");
 }
 
@@ -37,7 +40,15 @@ void cache_print_stats(Cache *c, char *header) {
 // Initialize the required fields
 /////////////////////////////////////////////////////////////////////////////////////
 
-Cache *cache_new(uint64_t size, uint64_t assoc, uint64_t linesize, uint64_t repl_policy) {
+Cache *cache_new(uint64_t size, uint64_t assoc, uint64_t line_size, uint64_t repl_policy) {
+
+	// The number of sets required for this size and associativity
+	uint64_t num_sets = (size / line_size) / assoc;
+
+	assert(assoc <= MAX_WAYS);
+
+	Cache *cache = new Cache(num_sets, assoc, line_size, (Repl_Policy)repl_policy);
+	return cache;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -47,6 +58,51 @@ Cache *cache_new(uint64_t size, uint64_t assoc, uint64_t linesize, uint64_t repl
 /////////////////////////////////////////////////////////////////////////////////////
 
 bool cache_access(Cache *c, Addr lineaddr, uint32_t is_write, uint32_t core_id) {
+	return c->access(lineaddr, is_write, core_id);
+};
+
+bool Cache::access(Addr lineaddr, uint32_t is_write, uint32_t core_id) {
+	if ( is_write ) {
+		stat_write_access++;
+	} else {
+		stat_read_access++;
+	};
+
+	// Some bitwise shenanigans to extract index and tag bits
+	uint64_t tag_and_index = lineaddr >> (uint64_t)std::ceil(std::log2(block_size));
+	auto index_bits = (uint64_t)std::ceil(std::log2(num_sets));
+	uint64_t tag = tag_and_index >> index_bits;
+	uint64_t index = tag_and_index ^ (tag << index_bits);
+
+	// Random access into the set for this index
+	auto set = sets.at(index);
+	// Search for a cache line in ways of this set
+	// Uses C++11 Lambda to equate cache lines by tag (and ensure valid)
+	auto it = std::find_if(set.ways.begin(), set.ways.end(), [&](const Cache_Line &line) { return (line.valid) && (line.tag == tag); });
+
+	if ( it == set.ways.end() ) { // MISS condition
+		// Update stats and return false
+		if ( is_write ) {
+			stat_write_miss++;
+		} else {
+			stat_read_miss++;
+		};
+		return MISS;
+	}
+	// Otherwise, was a HIT
+
+	// Use splice to reposition the found element to the beginning of the list
+	// This self organizing ensures most recently used at front
+	// and makes read/write access to this element fast
+	// (still results in a walk down the LL, but better than deallocate and re-insert)
+	set.ways.splice(set.ways.begin(), set.ways, it);
+
+	// Now we can access the line we just hit at front()
+	set.ways.front().accesses++;
+	set.ways.front().dirty = is_write;
+	set.ways.front().last_access_cycle = cycle;
+
+	return HIT;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -61,4 +117,5 @@ void cache_install(Cache *c, Addr lineaddr, uint32_t is_write, uint32_t core_id)
 // You may find it useful to split victim selection from install
 ////////////////////////////////////////////////////////////////////
 uint32_t cache_find_victim(Cache *c, uint32_t set_index, uint32_t core_id) {
+	return 0;
 }
