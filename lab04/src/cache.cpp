@@ -68,11 +68,15 @@ bool Cache::access(Addr lineaddr, uint32_t is_write, uint32_t core_id) {
 		stat_read_access++;
 	};
 
-	// Some bitwise shenanigans to extract index and tag bits
-	uint64_t tag_and_index = lineaddr >> (uint64_t)std::ceil(std::log2(block_size));
-	auto index_bits = (uint64_t)std::ceil(std::log2(num_sets));
-	uint64_t tag = tag_and_index >> index_bits;
-	uint64_t index = tag_and_index ^ (tag << index_bits);
+	
+	// uint64_t tag_and_index = lineaddr >> (uint64_t)std::ceil(std::log2(block_size));
+	// auto index_bits = (uint64_t)std::ceil(std::log2(num_sets));
+	// uint64_t tag = tag_and_index >> index_bits;
+	
+	// lineaddr is already tag and index portion (blocksize extraced in memsys.cpp)
+	uint64_t tag = lineaddr / num_sets;						// Integer division shenanigans. Tag is probably not necessary, just store the whole lineaddr in ways
+	uint64_t index = lineaddr & (num_sets - 1); 	//(num_sets is power-of-2, so get the bitmask (e.g. 64 -> 100_0000 - 1 = 11_1111)
+
 
 	// Random access into the set for this index
 	auto set = sets.at(index);
