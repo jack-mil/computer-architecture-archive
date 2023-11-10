@@ -14,6 +14,12 @@
 
 //////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////
+struct DRAM {
+	uint64_t stat_read_access;
+	uint64_t stat_write_access;
+	uint64_t stat_read_delay;
+	uint64_t stat_write_delay;
+};
 
 DRAM *dram_new();
 void dram_print_stats(DRAM *dram);

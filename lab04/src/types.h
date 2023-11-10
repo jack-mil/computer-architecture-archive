@@ -1,5 +1,7 @@
 #ifndef __TYPES_H__
 
+#include <stdint.h>
+
 #define HIT 1
 #define MISS 0
 

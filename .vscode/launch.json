@@ -102,7 +102,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/lab04/src/sim",
             "args": [
-                ""
+                "-mode",
+                "1",
+                "../traces/bzip2.mtr.gz"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/lab04/src/",
