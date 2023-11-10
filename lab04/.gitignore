@@ -1,3 +1,7 @@
 **/results/*.res
 **/src/*.o
+**/src/*.gcno
+**/src/*.gcda
+**/src/*.out
+**/src/*.result
 **/src/sim
