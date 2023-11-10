@@ -100,6 +100,13 @@ int main(int argc, char **argv) {
 	}
 
 	print_stats();
+
+	// CLEANUP MEMORY
+	free_memsys(memsys);
+	for ( size_t i = 0; i < NUM_CORES; i++ ) {
+		free(core[i]);
+	}
+
 	return 0;
 }
 

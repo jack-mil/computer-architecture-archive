@@ -61,6 +61,18 @@ Memsys *memsys_new(void) {
 	return sys;
 }
 
+void free_memsys(Memsys* model) {
+	delete(model->dcache);
+	delete(model->icache);
+	delete(model->l2cache);
+	for ( uint i = 0; i < NUM_CORES; i++ ) {
+				delete(model->dcache_coreid[i]);
+				delete(model->icache_coreid[i]);
+			}
+	free(model->dram);
+	free(model);
+}
+
 ////////////////////////////////////////////////////////////////////
 // Return the latency of a memory operation
 ////////////////////////////////////////////////////////////////////
