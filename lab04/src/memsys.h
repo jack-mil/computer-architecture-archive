@@ -20,7 +20,7 @@ struct Memsys {
 	Cache *icache_coreid[MAX_CORES]; // For Parts D,E
 
 	Cache *l2cache; // For Parts A,B,C,D,E
-	DRAM *dram;     // For Parts C,D,E
+	Dram *dram;     // For Parts C,D,E
 
 	// stats
 	unsigned long long stat_ifetch_access;

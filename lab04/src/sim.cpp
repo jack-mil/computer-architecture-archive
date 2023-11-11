@@ -15,7 +15,7 @@
 #include "memsys.h"
 #include "types.h"
 
-#define PRINT_DOTS 1
+#define PRINT_DOTS 0
 #define DOT_INTERVAL 100000
 
 /***************************************************************************
@@ -78,7 +78,8 @@ int main(int argc, char **argv) {
 		core[i] = core_new(memsys, trace_filename[i], i);
 	}
 
-	print_dots();
+	if (PRINT_DOTS)
+		print_dots();
 
 	//--------------------------------------------------------------------
 	// -- Iterate until all cores are done
@@ -92,7 +93,7 @@ int main(int argc, char **argv) {
 			all_cores_done &= core[i]->done;
 		}
 
-		if ( cycle - last_printdot_cycle >= DOT_INTERVAL ) {
+		if ( PRINT_DOTS && cycle - last_printdot_cycle >= DOT_INTERVAL ) {
 			print_dots();
 		}
 

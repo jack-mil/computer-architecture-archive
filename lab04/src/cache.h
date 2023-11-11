@@ -48,9 +48,12 @@ class Cache {
 	      m_repl_policy(policy),
 	      sets(num_sets){};
 	bool access(Addr lineaddr, bool is_write, uint32_t core_id);
-	void install(Addr lineaddr, bool is_write, uint32_t core_id);
-	uint32_t find_victim(uint32_t set_index, uint32_t core_id);
+	Cache_Line install(Addr lineaddr, bool is_write, uint32_t core_id);
+	Cache_Line find_victim(uint32_t set_index, uint32_t core_id);
 	void print_stats(const char *header);
+
+	// The last evicted cache block for writeback
+	Cache_Line last_evicted = {};
 
   private:
 	uint64_t stat_read_access = 0;  // Number of read (lookup accesses do not count as READ accesses) accesses made to the cache
@@ -63,8 +66,6 @@ class Cache {
 	uint16_t m_assoc;
 	uint16_t m_num_sets;
 	Repl_Policy m_repl_policy;
-
-	Cache_Line last_evicted = {};
 
 	std::vector<std::list<Cache_Line>> sets;
 };
@@ -80,8 +81,7 @@ class Cache {
 
 Cache *cache_new(uint64_t size, uint64_t assocs, uint64_t linesize, uint64_t repl_policy);
 bool cache_access(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id);
-void cache_install(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id);
-uint32_t cache_find_victim(Cache *c, uint32_t set_index, uint32_t core_id);
+Cache_Line cache_install(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id);
 bool comp_lfu(const Cache_Line &a, const Cache_Line &b);
 
 //////////////////////////////////////////////////////////////////////////////////////////////

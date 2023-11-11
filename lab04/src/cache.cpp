@@ -78,18 +78,18 @@ bool Cache::access(Addr lineaddr, bool is_write, uint32_t core_id) {
 	uint64_t index = lineaddr & (this->m_num_sets - 1); //(num_sets is power-of-2, so get the bitmask (e.g. 64 -> 100_0000 - 1 = 11_1111)
 
 	// Random access into the set for this index
-	auto &set = this->sets.at(index);
+	auto &ways = this->sets.at(index);
 
 	// Sanity check
-	assert(set.size() <= this->m_assoc);
-	// Search for a cache line in ways of this set
+	assert(ways.size() <= this->m_assoc);
+	// Search for a cache line in ways of this set. O(n) linear to assoc (unavoidable?)
 	// Uses C++11 Lambda to equate cache lines by tag (and ensure valid)
-	auto it = std::find_if(set.begin(),
-	                       set.end(),
-	                       [&](const Cache_Line &line) { return (line.valid) && (line.tag == tag); });
+	auto it = std::find_if(ways.begin(),
+	                       ways.end(),
+	                       [&](const Cache_Line &line) { return (line.valid) && (line.tag == lineaddr); });
 
 	// The tag was not found, MISS condition
-	if ( it == set.end() ) {
+	if ( it == ways.end() ) {
 		// Update stats and return false
 		if ( is_write ) {
 			stat_write_miss++;
@@ -101,19 +101,17 @@ bool Cache::access(Addr lineaddr, bool is_write, uint32_t core_id) {
 	// Otherwise, was a HIT
 
 	// Use splice to reposition the found element to the beginning of the list
-	// This self organizing ensures most recently used at front
-	// and makes read/write access to this element fast
-	// (still results in a walk down the LL, but better than deallocate and re-insert)
-	set.splice(set.begin(), set, it);
+	// Self organizing ensures MRU at front and LRU at back
+	ways.splice(ways.begin(), ways, it);
 
 	// Now we can access the line we just hit at front()
 	// by updating state
-	if ( set.front().lfu_count < LFU_cnt_max ) {
-		set.front().lfu_count++;
+	if ( ways.front().lfu_count < LFU_cnt_max ) {
+		ways.front().lfu_count++;
 	}
 	// Once the line becomes dirty, it remains dirty until evicted (writeback)
-	set.front().dirty = !set.front().dirty ? is_write : true;
-	set.front().last_access_cycle = cycle;
+	ways.front().dirty = !ways.front().dirty ? is_write : true;
+	ways.front().last_access_cycle = cycle;
 
 	return HIT;
 }
@@ -123,33 +121,38 @@ bool Cache::access(Addr lineaddr, bool is_write, uint32_t core_id) {
 // Copy victim into last_evicted_line for tracking writebacks
 /////////////////////////////////////////////////////////////////////////////////////
 
-void cache_install(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id) {
+// Returns a copy (?) of the evicted line, invalid if nothing was evicted
+Cache_Line cache_install(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id) {
 	return c->install(lineaddr, is_write, core_id);
 }
 
-void Cache::install(Addr lineaddr, bool is_write, uint32_t core_id) {
+// Returns a copy (?) of the evicted line, invalid if nothing was evicted
+Cache_Line Cache::install(Addr lineaddr, bool is_write, uint32_t core_id) {
 	// lineaddr is already tag and index portion (blocksize extracted in memsys.cpp)
-	uint64_t tag = lineaddr / m_num_sets;         // Integer division shenanigans. Tag is probably not necessary, just store the whole lineaddr in ways
+	// uint64_t tag = lineaddr / m_num_sets;         // Integer division shenanigans. Tag is probably not necessary, just store the whole lineaddr in ways
 	uint64_t index = lineaddr & (m_num_sets - 1); //(num_sets is power-of-2, so get the bitmask (e.g. 64 -> 100_0000 - 1 = 11_1111)
 
 	// Random access into the set for this index
 	auto &set = sets.at(index);
 
+	Cache_Line victim = {};
+	// Conflict Miss. The ways are full
 	if ( set.size() >= this->m_assoc ) {
-		this->find_victim(index, core_id); // Find victim will make space in the set
+		victim = this->find_victim(index, core_id); // Find victim will make space in the set
 	}
 
 	// Prep the new line
-	const Cache_Line &new_line = {.tag = tag,
+	const Cache_Line &new_line = {.tag = lineaddr, // Storing the whole tag+index here because it makes identifying victims for writeback easier
 	                              .valid = true,
 	                              .dirty = is_write,
 	                              .core_id = core_id,
 	                              .last_access_cycle = cycle,
 	                              .lfu_count = 0};
 	// Insert it into the most recently accessed spot
+	// TODO don't allocate memory, reusing invalid spots
 	set.push_front(new_line);
 
-	return;
+	return victim;
 }
 
 // Given two lines a and b, return true if a is less frequently used than b
@@ -162,8 +165,9 @@ bool comp_lfu(const Cache_Line &a, const Cache_Line &b) {
 	return (a.lfu_count < b.lfu_count);
 }
 
-// You may find it useful to split victim selection from install
-uint32_t Cache::find_victim(uint32_t set_index, uint32_t core_id) {
+// Find a victim to remove from the set at set_index. Ensures one open way (evicts)
+// Returns a copy of the Cache_Line that was evicted (for writeback)
+Cache_Line Cache::find_victim(uint32_t set_index, uint32_t core_id) {
 
 	Cache_Line victim;
 	auto &set = this->sets.at(set_index);
@@ -192,5 +196,5 @@ uint32_t Cache::find_victim(uint32_t set_index, uint32_t core_id) {
 	}
 
 	this->last_evicted = victim;
-	return 0;
+	return victim;
 }

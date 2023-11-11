@@ -7,7 +7,7 @@
 ///////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////
 
-void dram_print_stats(DRAM *dram) {
+void dram_print_stats(Dram *dram) {
 	double rddelay_avg = 0, wrdelay_avg = 0;
 	char header[256];
 	sprintf(header, "DRAM");
@@ -32,15 +32,25 @@ void dram_print_stats(DRAM *dram) {
 ///////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////
 
-DRAM *dram_new() {
+Dram *dram_new() {
+	return new Dram();
 }
 
-uint64_t dram_access(DRAM *dram, Addr lineaddr, bool is_dram_write) {
+uint64_t dram_access(Dram *dram, Addr lineaddr, bool is_dram_write) {
+	if ( is_dram_write ) {
+		dram->stat_write_access++;
+		dram->stat_write_delay+=100;
+	} else {
+		dram->stat_read_access++;
+		dram->stat_read_delay+=100;
+	}
+	return 100;
 }
 
 ///////////////////////////////////////////////////////////////////
 // Modify the function below only for Parts C,D,E
 ///////////////////////////////////////////////////////////////////
 
-uint64_t dram_access_mode_CDE(DRAM *dram, Addr lineaddr, bool is_dram_write) {
+uint64_t dram_access_mode_CDE(Dram *dram, Addr lineaddr, bool is_dram_write) {
+	return 100;
 }
