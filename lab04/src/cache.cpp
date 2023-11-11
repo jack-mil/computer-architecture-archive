@@ -152,6 +152,16 @@ void Cache::install(Addr lineaddr, bool is_write, uint32_t core_id) {
 	return;
 }
 
+// Given two lines a and b, return true if a is less frequently used than b
+bool comp_lfu(const Cache_Line &a, const Cache_Line &b) {
+	// In the case of a tie, the most recent (largest last_access_cycle) wins
+	if ( a.lfu_count == b.lfu_count ) {
+		return a.last_access_cycle > b.last_access_cycle;
+	}
+	// Otherwise, LFU wins
+	return (a.lfu_count < b.lfu_count);
+}
+
 // You may find it useful to split victim selection from install
 uint32_t Cache::find_victim(uint32_t set_index, uint32_t core_id) {
 
@@ -163,8 +173,11 @@ uint32_t Cache::find_victim(uint32_t set_index, uint32_t core_id) {
 			victim = set.back();
 			set.pop_back();
 			break;
-		case LFU_MRU:
-			break;
+		case LFU_MRU: { // new scope weirdness to prevent 'crosses initialization' error
+			auto it = std::min_element(set.cbegin(), set.cend(), comp_lfu);
+			victim = *it;
+			set.erase(it);
+		} break;
 		case SWP:
 			break;
 		default:
