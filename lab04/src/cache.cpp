@@ -35,7 +35,7 @@ void Cache::print_stats(const char *header) {
 	printf("\n%s_WRITE_MISS     \t\t : %10lu", header, this->stat_write_miss);
 	printf("\n%s_READ_MISS_PERC  \t\t : %10.3f", header, 100 * read_mr);
 	printf("\n%s_WRITE_MISS_PERC \t\t : %10.3f", header, 100 * write_mr);
-	printf("\n%s_TOTAL_EVICTS   \t\t : %10lu", header, this->stat_evicts);
+	// printf("\n%s_TOTAL_EVICTS   \t\t : %10lu", header, this->stat_evicts);
 	printf("\n%s_DIRTY_EVICTS   \t\t : %10lu", header, this->stat_dirty_evicts);
 	printf("\n");
 }
@@ -108,8 +108,9 @@ bool Cache::access(Addr lineaddr, bool is_write, uint32_t core_id) {
 
 	// Now we can access the line we just hit at front()
 	// by updating state
-	if ( set.front().lfu_count < LFU_cnt_max )
+	if ( set.front().lfu_count < LFU_cnt_max ) {
 		set.front().lfu_count++;
+	}
 	// Once the line becomes dirty, it remains dirty until evicted (writeback)
 	set.front().dirty = !set.front().dirty ? is_write : true;
 	set.front().last_access_cycle = cycle;
@@ -173,8 +174,9 @@ uint32_t Cache::find_victim(uint32_t set_index, uint32_t core_id) {
 	this->stat_evicts++;
 
 	// Track evictions
-	if ( victim.dirty )
+	if ( victim.dirty ) {
 		this->stat_dirty_evicts++;
+	}
 
 	this->last_evicted = victim;
 	return 0;
