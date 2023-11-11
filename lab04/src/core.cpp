@@ -30,7 +30,7 @@ Core *core_new(Memsys *memsys, char *trace_fname, uint32_t core_id) {
 ////////////////////////////////////////////////////////////////////
 
 void core_init_trace(Core *c) {
-	char command_string[512];
+	char command_string[256+1024];
 	sprintf(command_string, "gunzip -c %s", c->trace_fname);
 	if ( (c->trace = popen(command_string, "r")) == NULL ) {
 		printf("Command string is %s\n", command_string);
@@ -83,10 +83,10 @@ void core_cycle(Core *c) {
 ////////////////////////////////////////////////////////////////////
 
 void core_read_trace(Core *c) {
-	uint32_t tmp;
-	tmp = fread(&c->trace_inst_addr, 4, 1, c->trace);
-	tmp = fread(&c->trace_inst_type, 1, 1, c->trace);
-	tmp = fread(&c->trace_ldst_addr, 4, 1, c->trace);
+	// uint32_t tmp;
+	fread(&c->trace_inst_addr, 4, 1, c->trace);
+	fread(&c->trace_inst_type, 1, 1, c->trace);
+	fread(&c->trace_ldst_addr, 4, 1, c->trace);
 
 	if ( feof(c->trace) ) {
 		c->done = true;

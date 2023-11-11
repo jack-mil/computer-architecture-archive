@@ -20,8 +20,8 @@ void dram_print_stats(DRAM *dram) {
 		wrdelay_avg = (double)(dram->stat_write_delay) / (double)(dram->stat_write_access);
 	}
 
-	printf("\n%s_READ_ACCESS\t\t : %10llu", header, dram->stat_read_access);
-	printf("\n%s_WRITE_ACCESS\t\t : %10llu", header, dram->stat_write_access);
+	printf("\n%s_READ_ACCESS\t\t : %10lu", header, dram->stat_read_access);
+	printf("\n%s_WRITE_ACCESS\t\t : %10lu", header, dram->stat_write_access);
 	printf("\n%s_READ_DELAY_AVG\t\t : %10.3f", header, rddelay_avg);
 	printf("\n%s_WRITE_DELAY_AVG\t\t : %10.3f", header, wrdelay_avg);
 }

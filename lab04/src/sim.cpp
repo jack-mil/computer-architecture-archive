@@ -251,7 +251,7 @@ void get_params(int argc, char **argv) {
 			num_trace_filename++;
 			NUM_CORES = num_trace_filename;
 		} else {
-			char msg[256];
+			char msg[256 + 1024];
 			sprintf(msg, "Invalid option %s, got filename %s", argv[i], trace_filename[NUM_CORES]);
 			die_message(msg);
 		}
