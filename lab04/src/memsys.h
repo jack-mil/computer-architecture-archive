@@ -29,6 +29,7 @@ struct Memsys {
 	uint64_t stat_ifetch_delay;
 	uint64_t stat_load_delay;
 	uint64_t stat_store_delay;
+	~Memsys();
 };
 
 ///////////////////////////////////////////////////////////////////

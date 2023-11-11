@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 	print_stats();
 
 	// CLEANUP MEMORY
-	free_memsys(memsys);
+	delete memsys;
 	for ( size_t i = 0; i < NUM_CORES; i++ ) {
 		free(core[i]);
 	}

@@ -27,11 +27,10 @@ extern uint64_t L2CACHE_ASSOC;
 extern uint64_t L2CACHE_REPL;
 extern uint64_t NUM_CORES;
 
-////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////
-
+// Use delete on the return value of this function (should be a constructor?)
 Memsys *memsys_new(void) {
-	Memsys *sys = (Memsys *)calloc(1, sizeof(Memsys));
+	// Memsys *sys = (Memsys *)calloc(1, sizeof(Memsys));
+	Memsys *sys = new Memsys();
 
 	switch ( SIM_MODE ) {
 		case SIM_MODE_A:
@@ -61,16 +60,16 @@ Memsys *memsys_new(void) {
 	return sys;
 }
 
-void free_memsys(Memsys* model) {
-	delete(model->dcache);
-	delete(model->icache);
-	delete(model->l2cache);
+// Destructor to free all this memory. Use delete on return value of memsys_new()
+Memsys::~Memsys() {
+	delete dcache;
+	delete icache;
+	delete l2cache;
 	for ( uint i = 0; i < NUM_CORES; i++ ) {
-				delete(model->dcache_coreid[i]);
-				delete(model->icache_coreid[i]);
-			}
-	free(model->dram);
-	free(model);
+		delete dcache_coreid[i];
+		delete icache_coreid[i];
+	}
+	free(dram);
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -87,6 +86,7 @@ uint64_t memsys_access(Memsys *sys, Addr addr, Access_Type type, uint32_t core_i
 		case SIM_MODE_A:
 			delay = memsys_access_modeA(sys, lineaddr, type, core_id);
 			break;
+
 		case SIM_MODE_B:
 		case SIM_MODE_C:
 			delay = memsys_access_modeBC(sys, lineaddr, type, core_id);
@@ -96,6 +96,7 @@ uint64_t memsys_access(Memsys *sys, Addr addr, Access_Type type, uint32_t core_i
 		case SIM_MODE_E:
 			delay = memsys_access_modeDE(sys, lineaddr, type, core_id);
 			break;
+
 		default:
 			break;
 	}
