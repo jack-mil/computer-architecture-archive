@@ -103,7 +103,13 @@
             "program": "${workspaceFolder}/lab04/src/sim",
             "args": [
                 "-mode",
+                "3",
+                "-L2repl",
                 "1",
+                "-L2sizeKB",
+                "1024",
+                "-dram_policy",
+                "0",
                 "../traces/bzip2.mtr.gz"
             ],
             "stopAtEntry": false,

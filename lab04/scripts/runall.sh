@@ -19,14 +19,14 @@ fi
 echo "Running Part A"
 
 ../src/sim -mode 1 ../traces/bzip2.mtr.gz > ../results/A.bzip2.res
-../src/sim -mode 1 ../traces/lbm.mtr.gz  > ../results/A.lbm.res 
-../src/sim -mode 1 ../traces/libq.mtr.gz   > ../results/A.libq.res 
+../src/sim -mode 1 ../traces/lbm.mtr.gz  > ../results/A.lbm.res
+../src/sim -mode 1 ../traces/libq.mtr.gz   > ../results/A.libq.res
 
 echo "Running Part B"
 
-../src/sim -mode 2 -L2repl 1 -L2sizeKB 1024 ../traces/bzip2.mtr.gz  > ../results/B.S1MB.bzip2.res 
+../src/sim -mode 2 -L2repl 1 -L2sizeKB 1024 ../traces/bzip2.mtr.gz  > ../results/B.S1MB.bzip2.res
 ../src/sim -mode 2 -L2repl 1 -L2sizeKB 1024 ../traces/lbm.mtr.gz    > ../results/B.S1MB.lbm.res
-../src/sim -mode 2 -L2repl 1 -L2sizeKB 1024 ../traces/libq.mtr.gz    > ../results/B.S1MB.libq.res 
+../src/sim -mode 2 -L2repl 1 -L2sizeKB 1024 ../traces/libq.mtr.gz    > ../results/B.S1MB.libq.res
 
 echo "Running Part C"
 

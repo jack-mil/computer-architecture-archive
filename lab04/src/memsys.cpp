@@ -27,6 +27,8 @@ extern uint64_t L2CACHE_ASSOC;
 extern uint64_t L2CACHE_REPL;
 extern uint64_t NUM_CORES;
 
+extern uint8_t DRAM_PAGE_POLICY;
+
 // Use delete on the return value of this function (should be a constructor?)
 Memsys *memsys_new(void) {
 	// Memsys *sys = (Memsys *)calloc(1, sizeof(Memsys));
@@ -42,13 +44,13 @@ Memsys *memsys_new(void) {
 			sys->dcache = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			sys->icache = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
-			sys->dram = dram_new();
+			sys->dram = dram_new(DRAM_PAGE_POLICY);
 			break;
 
 		case SIM_MODE_D:
 		case SIM_MODE_E:
 			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
-			sys->dram = dram_new();
+			sys->dram = dram_new(DRAM_PAGE_POLICY);
 			for ( uint i = 0; i < NUM_CORES; i++ ) {
 				sys->dcache_coreid[i] = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 				sys->icache_coreid[i] = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
