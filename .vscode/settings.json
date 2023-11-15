@@ -3,6 +3,7 @@
         "EXEQ",
         "GSELECT",
         "GSHARE",
+        "lineaddr",
         "misprediction",
         "PIPEWIDTH",
         "Superscalar",

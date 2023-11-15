@@ -219,6 +219,8 @@ uint64_t memsys_access_modeBC(Memsys *sys, Addr lineaddr, Access_Type type, uint
 	// Perform the ICACHE/ DCACHE access
 	bool dcache_access = !(type == ACCESS_TYPE_IFETCH);
 	bool is_write = (type == ACCESS_TYPE_STORE);
+
+	// Check for hit in tier 1 cache (instruction or data cache)
 	if ( dcache_access ) {
 		if ( cache_access(sys->dcache, lineaddr, is_write, core_id) ) {
 			return DCACHE_HIT_LATENCY;
@@ -227,42 +229,53 @@ uint64_t memsys_access_modeBC(Memsys *sys, Addr lineaddr, Access_Type type, uint
 		if ( cache_access(sys->icache, lineaddr, is_write, core_id) ) {
 			return ICACHE_HIT_LATENCY;
 		}
-	} // If here, we missed in L1
+	} // On Hit, just return the hit latency
 
-	// On DCACHE miss, access the L2 Cache + install the new line + if needed, perform writeback
+	// On miss, access the L2 Cache + install the new line + if needed, perform writeback
+
+	// On L1 miss, get delay from accessing the L2 system. Read only (dirty flag set when installed below)
 	delay = memsys_L2_access(sys, lineaddr, false, core_id); // "GET" the data from L2 (or DRAM)
 
-	// Allocate the new line in L1 cache. Might be a write
+	// L1 Cache(s) are allocate-on-miss. Install the line in the appropriate cache
 	Cache_Line victim = cache_install(dcache_access ? sys->dcache : sys->icache, lineaddr, is_write, core_id);
 
-	// Perform writeback if a dirty line was evicted
+	// Perform writeback to lower level cache IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit
 		// victim tag is actually tag+index = lineaddr of the victim
 		memsys_L2_access(sys, victim.tag, true, core_id); // perform a writeback access to L2
 	}
 
-	return delay;
+	// Miss delay is time to check for hit, plus however long lower layer took
+	return delay + (dcache_access ? DCACHE_HIT_LATENCY : ICACHE_HIT_LATENCY);
 }
 
 uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_t core_id) {
 
-	uint64_t delay = L2CACHE_HIT_LATENCY;
+	uint64_t delay = 0;
 
-	// Perform the L2 access
+	// Check for Hit in L2 cache
 	if ( cache_access(sys->l2cache, lineaddr, is_writeback, core_id) ) {
-		return DCACHE_HIT_LATENCY+L2CACHE_HIT_LATENCY;
-	}
+		return L2CACHE_HIT_LATENCY;
+	} // On Hit, just return the hit latency
 
 	// On L2 miss, access DRAM + install the new line + if needed, perform writeback
+
+	// Get delay from DRAM on L2 write (when L1 writes-back)
 	if ( !is_writeback ) {
-		delay = dram_access(sys->dram, lineaddr, false); // Read from dram on L2 miss
+		delay = dram_access(sys->dram, lineaddr, false);
 	}
 
+	// L2 Cache is allocate-on-miss. Install the line (either from DRAM or L1) and evict if necessary
 	Cache_Line victim = cache_install(sys->l2cache, lineaddr, is_writeback, core_id);
-	if ( victim.valid && victim.dirty ) {         // Do some writeback to DRAM or something
-		dram_access(sys->dram, victim.tag, true); // Writeback to DRAM on dirty evict from L2
+
+	// Perform writeback to DRAM IF a dirty line was evicted
+	if ( victim.valid && victim.dirty ) { // short circuit
+		// victim tag is actually tag+index = lineaddr of the victim
+		dram_access(sys->dram, victim.tag, true); // Perform write to DRAM
 	}
-	return delay + DCACHE_HIT_LATENCY + L2CACHE_HIT_LATENCY;
+
+	// Miss delay is time to check for hit, plus however long lower layer took
+	return delay + L2CACHE_HIT_LATENCY;
 }
 
 /////////////////////////////////////////////////////////////////////
