@@ -13,6 +13,7 @@ extern MODE SIM_MODE;
 /////////////////////////////////////////////////////////////////////////////////////
 void dram_print_stats(Dram *dram) {
 	double rddelay_avg = 0, wrdelay_avg = 0;
+	double mr = 0;
 	char header[256];
 	sprintf(header, "DRAM");
 
@@ -24,8 +25,15 @@ void dram_print_stats(Dram *dram) {
 		wrdelay_avg = (double)(dram->stat_write_delay) / (double)(dram->stat_write_access);
 	}
 
+	if ( dram->stat_buffer_miss && dram->stat_read_access && dram->stat_write_access ) {
+		mr = (double)dram->stat_buffer_miss / (double)(dram->stat_read_access + dram->stat_write_access) ;
+	}
+
 	printf("\n%s_READ_ACCESS\t\t : %10lu", header, dram->stat_read_access);
 	printf("\n%s_WRITE_ACCESS\t\t : %10lu", header, dram->stat_write_access);
+	printf("\n%s_BUFFER_MISS\t\t : %10lu", header, dram->stat_buffer_miss);
+	printf("\n%s_BUFFER_MISS_PERC\t\t : %10.3f", header, 100 * mr);
+
 	printf("\n%s_READ_DELAY_AVG\t\t : %10.3f", header, rddelay_avg);
 	printf("\n%s_WRITE_DELAY_AVG\t\t : %10.3f", header, wrdelay_avg);
 }
@@ -63,7 +71,6 @@ uint64_t dram_access(Dram *dram, Addr lineaddr, bool is_dram_write) {
 	}
 	return delay;
 }
-
 
 /* Parts C,D,E Simulate DRAM open/closed page policies */
 uint64_t dram_access_mode_CDE(Dram *dram, Addr lineaddr, bool is_dram_write) {

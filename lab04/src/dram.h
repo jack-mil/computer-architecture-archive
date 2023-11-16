@@ -38,6 +38,7 @@ class Dram {
   public:
 	uint64_t stat_read_access;
 	uint64_t stat_write_access;
+	uint64_t stat_buffer_miss;
 	uint64_t stat_read_delay;
 	uint64_t stat_write_delay;
 
