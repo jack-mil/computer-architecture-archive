@@ -3,5 +3,6 @@
 **/src/*.gcno
 **/src/*.gcda
 **/src/*.out
+**/src/*.out.*
 **/src/*.result
 **/src/sim
