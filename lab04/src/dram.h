@@ -35,25 +35,26 @@ struct Row_Buffer {
 };
 
 class Dram {
-  public:
-	uint64_t stat_read_access;
-	uint64_t stat_write_access;
-	uint64_t stat_buffer_miss;
-	uint64_t stat_read_delay;
-	uint64_t stat_write_delay;
-
-	std::vector<Row_Buffer> banks; // Array of 16 banks, each with a row buffer
-	Page_Policy page_policy;       // 0:Open Page Policy, 1: Close Page Policy
-
-	// Construct a DRAM object with 16 banks and the given page policy
-	Dram(Page_Policy policy) : banks(DRAM_BANKS), page_policy(policy){};
-
   private:
-};
+	// the {} makes default initilization
+	uint64_t m_stat_read_access{};
+	uint64_t m_stat_write_access{};
+	uint64_t m_stat_buffer_miss{};
+	uint64_t m_stat_read_delay{};
+	uint64_t m_stat_write_delay{};
 
-Dram *dram_new(uint8_t policy);
-void dram_print_stats(Dram *dram);
-uint64_t dram_access(Dram *dram, Addr lineaddr, bool is_dram_write);
-uint64_t dram_access_mode_CDE(Dram *dram, Addr lineaddr, bool is_dram_write);
+	std::vector<Row_Buffer> m_banks; // Array of 16 banks, each with a row buffer
+	Page_Policy m_page_policy;       // 0:Open Page Policy, 1: Close Page Policy
+
+  public:
+	// Construct a DRAM object with 16 banks and the given page policy
+	Dram(Page_Policy policy) : m_banks(DRAM_BANKS), m_page_policy(policy){};
+	// Construct a DRAM object with 16 banks. 0:Open Page Policy, 1: Close Page Policy
+	Dram(uint policy) : m_banks(DRAM_BANKS), m_page_policy((Page_Policy)policy){};
+
+	uint64_t access(Addr lineaddr, bool is_dram_write);
+	uint64_t access_mode_CDE(Addr lineaddr, bool is_dram_write);
+	void print_stats();
+};
 
 #endif // DRAM_H

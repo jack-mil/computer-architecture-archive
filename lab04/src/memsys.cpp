@@ -44,13 +44,15 @@ Memsys *memsys_new(void) {
 			sys->dcache = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			sys->icache = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
-			sys->dram = dram_new(DRAM_PAGE_POLICY);
+			sys->dram = new Dram(DRAM_PAGE_POLICY);
+			// sys->dram = dram_new(DRAM_PAGE_POLICY);
 			break;
 
 		case SIM_MODE_D:
 		case SIM_MODE_E:
 			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
-			sys->dram = dram_new(DRAM_PAGE_POLICY);
+			sys->dram = new Dram(DRAM_PAGE_POLICY);
+			// sys->dram = dram_new(DRAM_PAGE_POLICY);
 			for ( uint i = 0; i < NUM_CORES; i++ ) {
 				sys->dcache_coreid[i] = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 				sys->icache_coreid[i] = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
@@ -168,7 +170,7 @@ void memsys_print_stats(Memsys *sys) {
 			cache_print_stats(sys->dcache, header);
 			sprintf(header, "L2CACHE");
 			cache_print_stats(sys->l2cache, header);
-			dram_print_stats(sys->dram);
+			sys->dram->print_stats();
 			break;
 
 		case SIM_MODE_D:
@@ -184,7 +186,7 @@ void memsys_print_stats(Memsys *sys) {
 			cache_print_stats(sys->dcache_coreid[1], header);
 			sprintf(header, "L2CACHE");
 			cache_print_stats(sys->l2cache, header);
-			dram_print_stats(sys->dram);
+			sys->dram->print_stats();
 			break;
 		default:
 			break;
@@ -264,7 +266,8 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 
 	// Get delay from DRAM on L2 write (when L1 writes-back)
 	if ( !is_writeback ) {
-		delay = dram_access(sys->dram, lineaddr, false);
+		// delay = dram_access(sys->dram, lineaddr, false);
+		delay = sys->dram->access(lineaddr,false);
 	}
 
 	// L2 Cache is allocate-on-miss. Install the line (either from DRAM or L1) and evict if necessary
@@ -273,7 +276,8 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	// Perform writeback to DRAM IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit
 		// victim tag is actually tag+index = lineaddr of the victim
-		dram_access(sys->dram, victim.tag, true); // Perform write to DRAM
+		// dram_access(sys->dram, victim.tag, true); // Perform write to DRAM
+		sys->dram->access(victim.tag, true); // Perform write to DRAM
 	}
 
 	// Miss delay is time to check for hit, plus however long lower layer took
