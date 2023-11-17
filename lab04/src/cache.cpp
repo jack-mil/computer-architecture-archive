@@ -153,6 +153,7 @@ Cache_Line Cache::install(Addr lineaddr, bool is_write, uint32_t core_id) {
 	// TODO don't allocate memory, reusing invalid spots
 	set.push_front(new_line);
 
+	// Invalid if nothing was evicted
 	return victim;
 }
 
