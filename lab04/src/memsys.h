@@ -36,7 +36,6 @@ struct Memsys {
 ///////////////////////////////////////////////////////////////////
 
 Memsys *memsys_new();
-void free_memsys(Memsys* model);
 void memsys_print_stats(Memsys *sys);
 
 uint64_t memsys_access(Memsys *sys, Addr addr, Access_Type type, uint32_t core_id);

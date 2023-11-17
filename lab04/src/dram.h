@@ -52,8 +52,11 @@ class Dram {
 	// Construct a DRAM object with 16 banks. 0:Open Page Policy, 1: Close Page Policy
 	Dram(uint policy) : m_banks(DRAM_BANKS), m_page_policy((Page_Policy)policy){};
 
+	// Get the delay to access cache block
 	uint64_t access(Addr lineaddr, bool is_dram_write);
+	// Get the delay to access cache block according to page policy
 	uint64_t access_mode_CDE(Addr lineaddr, bool is_dram_write);
+	// Print information about the access of this object. For grading
 	void print_stats();
 };
 

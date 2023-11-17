@@ -8,7 +8,6 @@
 extern uint64_t CACHE_LINESIZE;
 extern MODE SIM_MODE;
 
-// Print information about the access of this object. For grading
 void Dram::print_stats() {
 	double rddelay_avg = 0, wrdelay_avg = 0, mr = 0;
 

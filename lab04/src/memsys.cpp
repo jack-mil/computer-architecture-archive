@@ -36,26 +36,26 @@ Memsys *memsys_new(void) {
 
 	switch ( SIM_MODE ) {
 		case SIM_MODE_A:
-			sys->dcache = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
+			sys->dcache = Cache::by_size(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			break;
 
 		case SIM_MODE_B:
 		case SIM_MODE_C:
-			sys->dcache = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
-			sys->icache = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
-			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
+			sys->dcache = Cache::by_size(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
+			sys->icache = Cache::by_size(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
+			sys->l2cache = Cache::by_size(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
 			sys->dram = new Dram(DRAM_PAGE_POLICY);
 			// sys->dram = dram_new(DRAM_PAGE_POLICY);
 			break;
 
 		case SIM_MODE_D:
 		case SIM_MODE_E:
-			sys->l2cache = cache_new(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
+			sys->l2cache = Cache::by_size(L2CACHE_SIZE, L2CACHE_ASSOC, CACHE_LINESIZE, L2CACHE_REPL);
 			sys->dram = new Dram(DRAM_PAGE_POLICY);
 			// sys->dram = dram_new(DRAM_PAGE_POLICY);
 			for ( uint i = 0; i < NUM_CORES; i++ ) {
-				sys->dcache_coreid[i] = cache_new(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
-				sys->icache_coreid[i] = cache_new(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
+				sys->dcache_coreid[i] = Cache::by_size(DCACHE_SIZE, DCACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
+				sys->icache_coreid[i] = Cache::by_size(ICACHE_SIZE, ICACHE_ASSOC, CACHE_LINESIZE, REPL_POLICY);
 			}
 			break;
 		default:
@@ -160,16 +160,16 @@ void memsys_print_stats(Memsys *sys) {
 	switch ( SIM_MODE ) {
 		case SIM_MODE_A:
 			sprintf(header, "DCACHE");
-			cache_print_stats(sys->dcache, header);
+			sys->dcache->print_stats(header);
 			break;
 		case SIM_MODE_B:
 		case SIM_MODE_C:
 			sprintf(header, "ICACHE");
-			cache_print_stats(sys->icache, header);
+			sys->icache->print_stats(header);
 			sprintf(header, "DCACHE");
-			cache_print_stats(sys->dcache, header);
+			sys->dcache->print_stats(header);
 			sprintf(header, "L2CACHE");
-			cache_print_stats(sys->l2cache, header);
+			sys->l2cache->print_stats(header);
 			sys->dram->print_stats();
 			break;
 
@@ -177,15 +177,15 @@ void memsys_print_stats(Memsys *sys) {
 		case SIM_MODE_E:
 			assert(NUM_CORES == 2); // Hardcoded
 			sprintf(header, "ICACHE_0");
-			cache_print_stats(sys->icache_coreid[0], header);
+			sys->icache_coreid[0]->print_stats(header);
 			sprintf(header, "DCACHE_0");
-			cache_print_stats(sys->dcache_coreid[0], header);
+			sys->dcache_coreid[0]->print_stats(header);
 			sprintf(header, "ICACHE_1");
-			cache_print_stats(sys->icache_coreid[1], header);
+			sys->icache_coreid[1]->print_stats(header);
 			sprintf(header, "DCACHE_1");
-			cache_print_stats(sys->dcache_coreid[1], header);
+			sys->dcache_coreid[1]->print_stats(header);
 			sprintf(header, "L2CACHE");
-			cache_print_stats(sys->l2cache, header);
+			sys->l2cache->print_stats(header);
 			sys->dram->print_stats();
 			break;
 		default:
@@ -206,9 +206,9 @@ uint64_t memsys_access_modeA(Memsys *sys, Addr lineaddr, Access_Type type, uint3
 
 	if ( needs_dcache_access ) {
 		// Miss
-		if ( !cache_access(sys->dcache, lineaddr, is_write, core_id) ) {
+		if ( !sys->dcache->access(lineaddr, is_write, core_id) ) {
 			// Install the new line in L1
-			cache_install(sys->dcache, lineaddr, is_write, core_id);
+			sys->dcache->install(lineaddr, is_write, core_id);
 		}
 	}
 
@@ -226,11 +226,11 @@ uint64_t memsys_access_modeBC(Memsys *sys, Addr lineaddr, Access_Type type, uint
 
 	// Check for hit in tier 1 cache (instruction or data cache)
 	if ( dcache_access ) {
-		if ( cache_access(sys->dcache, lineaddr, is_write, core_id) ) {
+		if ( sys->dcache->access(lineaddr, is_write, core_id) ) {
 			return DCACHE_HIT_LATENCY;
 		}
 	} else {
-		if ( cache_access(sys->icache, lineaddr, is_write, core_id) ) {
+		if ( sys->icache->access(lineaddr, is_write, core_id) ) {
 			return ICACHE_HIT_LATENCY;
 		}
 	} // On Hit, just return the hit latency
@@ -241,7 +241,8 @@ uint64_t memsys_access_modeBC(Memsys *sys, Addr lineaddr, Access_Type type, uint
 	delay = memsys_L2_access(sys, lineaddr, false, core_id); // "GET" the data from L2 (or DRAM)
 
 	// L1 Cache(s) are allocate-on-miss. Install the line in the appropriate cache
-	Cache_Line victim = cache_install(dcache_access ? sys->dcache : sys->icache, lineaddr, is_write, core_id);
+	Cache_Line victim = dcache_access ? sys->dcache->install(lineaddr, is_write, core_id)
+	                                  : sys->icache->install(lineaddr, is_write, core_id);
 
 	// Perform writeback to lower level cache IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit
@@ -258,7 +259,7 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	uint64_t delay = 0;
 
 	// Check for Hit in L2 cache
-	if ( cache_access(sys->l2cache, lineaddr, is_writeback, core_id) ) {
+	if ( sys->l2cache->access(lineaddr, is_writeback, core_id) ) {
 		return L2CACHE_HIT_LATENCY;
 	} // On Hit, just return the hit latency
 
@@ -267,11 +268,11 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	// Get delay from DRAM on L2 write (when L1 writes-back)
 	if ( !is_writeback ) {
 		// delay = dram_access(sys->dram, lineaddr, false);
-		delay = sys->dram->access(lineaddr,false);
+		delay = sys->dram->access(lineaddr, false);
 	}
 
 	// L2 Cache is allocate-on-miss. Install the line (either from DRAM or L1) and evict if necessary
-	Cache_Line victim = cache_install(sys->l2cache, lineaddr, is_writeback, core_id);
+	Cache_Line victim = sys->l2cache->install(lineaddr, is_writeback, core_id);
 
 	// Perform writeback to DRAM IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit

@@ -32,12 +32,6 @@ struct Cache_Line {
 	uint64_t lfu_count;         // Track the number of accesses for LFU replacement policy (frequency)
 };
 
-// A cache set it made up of 1 or more ways
-struct Cache_Set {
-	// Ways implemented as linked list for quick insertion
-	std::list<Cache_Line> ways;
-};
-
 // A cache with configurable number of sets and associativity (ways per set)
 class Cache {
   public:
@@ -46,46 +40,44 @@ class Cache {
 	    : m_assoc(assoc),
 	      m_num_sets(num_sets),
 	      m_repl_policy(policy),
-	      sets(num_sets){};
+	      m_sets(num_sets){};
+	// Check for a hit at the specified line address
 	bool access(Addr lineaddr, bool is_write, uint32_t core_id);
+	// Insert a new cache line into this cache. Return the victim if it exists
 	Cache_Line install(Addr lineaddr, bool is_write, uint32_t core_id);
-	Cache_Line find_victim(uint32_t set_index, uint32_t core_id);
+	// Print information about the accesses of this object. For grading
 	void print_stats(const char *header);
+	// Get a pointer to a cache initalized by size instead of using the Cache() ctor
+	static Cache* by_size(uint64_t size, uint64_t assoc, uint64_t line_size, uint64_t repl_policy);
 
 	// The last evicted cache block for writeback
 	Cache_Line last_evicted = {};
 
   private:
-	uint64_t stat_read_access = 0;  // Number of read (lookup accesses do not count as READ accesses) accesses made to the cache
-	uint64_t stat_write_access = 0; // Number of write accesses made to the cache
-	uint64_t stat_read_miss = 0;    // Number of READ requests that lead to a MISS at the respective cache.
-	uint64_t stat_write_miss = 0;   // Number of WRITE requests that lead to a MISS at the respective cache
-	uint64_t stat_evicts = 0;       // Count of requests to evict DIRTY lines.
-	uint64_t stat_dirty_evicts = 0; // Count of requests to evict DIRTY lines.
+	uint64_t m_stat_read_access{};  // Number of read (lookup accesses do not count as READ accesses) accesses made to the cache
+	uint64_t m_stat_write_access{}; // Number of write accesses made to the cache
+	uint64_t m_stat_read_miss{};    // Number of READ requests that lead to a MISS at the respective cache.
+	uint64_t m_stat_write_miss{};   // Number of WRITE requests that lead to a MISS at the respective cache
+	uint64_t m_stat_evicts{};       // Count of requests to evict DIRTY lines.
+	uint64_t m_stat_dirty_evicts{}; // Count of requests to evict DIRTY lines.
 
 	uint16_t m_assoc;
 	uint16_t m_num_sets;
 	Repl_Policy m_repl_policy;
 
-	std::vector<std::list<Cache_Line>> sets;
+	// A vector of sets, each with a DLL to represent cache ways.
+	std::vector<std::list<Cache_Line>> m_sets;
+
+	// Evicts a victim at index according to repl_policy. Return the evicted line
+	Cache_Line find_victim(uint32_t set_index, uint32_t core_id);
+	// Static helper function for LFU+MRU policy
+	static bool comp_lfu(const Cache_Line &a, const Cache_Line &b);
 };
 
-//////////////////////////////////////////////////////////////////////////////////////
-// Mandatory variables required for generating the desired final reports as necessary
-// Used by cache_print_stats()
-//////////////////////////////////////////////////////////////////////////////////////
+inline Cache *Cache::by_size(uint64_t size, uint64_t assoc, uint64_t line_size, uint64_t repl_policy) {
+	assert(assoc <= MAX_WAYS);
+	// The number of sets required for this size and associativity
+	return new Cache((size / line_size) / assoc, assoc, (Repl_Policy)repl_policy);
+}
 
-/////////////////////////////////////////////////////////////////////////////////////////
-// Functions to be implemented
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-Cache *cache_new(uint64_t size, uint64_t assocs, uint64_t linesize, uint64_t repl_policy);
-bool cache_access(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id);
-Cache_Line cache_install(Cache *c, Addr lineaddr, bool is_write, uint32_t core_id);
-bool comp_lfu(const Cache_Line &a, const Cache_Line &b);
-
-//////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-void cache_print_stats(Cache *c, char *header);
 #endif // CACHE_H
