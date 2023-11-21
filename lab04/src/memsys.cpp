@@ -233,9 +233,7 @@ uint64_t memsys_access_modeBC(Memsys *sys, Addr lineaddr, Access_Type type, uint
 		if ( sys->icache->access(lineaddr, is_write, core_id) ) {
 			return ICACHE_HIT_LATENCY;
 		}
-	} // On Hit, just return the hit latency
-
-	// On miss, access the L2 Cache + install the new line + if needed, perform writeback
+	} // On hit, just return the latency
 
 	// On L1 miss, get delay from accessing the L2 system. Read only (dirty flag set when installed below)
 	delay = memsys_L2_access(sys, lineaddr, false, core_id); // "GET" the data from L2 (or DRAM)
@@ -265,9 +263,8 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 
 	// On L2 miss, access DRAM + install the new line + if needed, perform writeback
 
-	// Get delay from DRAM on L2 write (when L1 writes-back)
+	// Only get delay from DRAM on L2 read (no need on writeback to access memory)
 	if ( !is_writeback ) {
-		// delay = dram_access(sys->dram, lineaddr, false);
 		delay = sys->dram->access(lineaddr, false);
 	}
 
@@ -277,7 +274,6 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	// Perform writeback to DRAM IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit
 		// victim tag is actually tag+index = lineaddr of the victim
-		// dram_access(sys->dram, victim.tag, true); // Perform write to DRAM
 		sys->dram->access(victim.tag, true); // Perform write to DRAM
 	}
 
@@ -285,16 +281,11 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	return delay + L2CACHE_HIT_LATENCY;
 }
 
-/////////////////////////////////////////////////////////////////////
-// This function converts virtual page number (VPN) to physical frame
-// number (PFN).  Note, you will need additional operations to obtain
-// VPN from lineaddr and to get physical lineaddr using PFN.
-/////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////
-// DO NOT MODIFY THE CODE OF THIS FUNCTIONS
-////////////////////////////////////////////////////////////////////
-
+/* This function converts virtual page number (VPN) to physical frame
+ * number (PFN).  Note, you will need additional operations to obtain
+ * VPN from lineaddr and to get physical lineaddr using PFN.
+ * DO NOT MODIFY THE CODE OF THIS FUNCTION.
+ */
 uint64_t memsys_convert_vpn_to_pfn(Memsys *sys, uint64_t vpn, uint32_t core_id) {
 
 	uint64_t tail = vpn & 0x000fffff;
@@ -304,6 +295,7 @@ uint64_t memsys_convert_vpn_to_pfn(Memsys *sys, uint64_t vpn, uint32_t core_id) 
 	return pfn;
 }
 
+/* Shared L2 cache and DRAM memory */
 uint64_t memsys_access_modeDE(Memsys *sys, Addr v_lineaddr, Access_Type type, uint32_t core_id) {
 
 	uint64_t delay = 0;
@@ -312,16 +304,66 @@ uint64_t memsys_access_modeDE(Memsys *sys, Addr v_lineaddr, Access_Type type, ui
 	// function memsys_convert_vpn_to_pfn(). Page size is defined to be 4 KB.
 	// NOTE: VPN_to_PFN operates at page granularity and returns page addr.
 
-	return delay;
+	// shift out first 6 bits (4kB pages and 64B cache block)
+	static const uint offset_diff = PAGE_SIZE / CACHE_LINESIZE;
+	uint64_t vpn = v_lineaddr / (offset_diff);
+	uint64_t pfn = memsys_convert_vpn_to_pfn(sys, vpn, core_id);
+	// left shift pfn and add back index bits from virtual address
+	uint64_t f_lineaddr = (pfn * offset_diff) + (v_lineaddr & (offset_diff - 1));
+
+	bool dcache_access = !(type == ACCESS_TYPE_IFETCH);
+	bool is_write = (type == ACCESS_TYPE_STORE);
+
+	// Check for hit in private L1 cache (I or D cache)
+	if ( dcache_access ) {
+		if ( sys->dcache_coreid[core_id]->access(f_lineaddr, is_write, core_id) )
+			return DCACHE_HIT_LATENCY;
+	} else {
+		if ( sys->icache_coreid[core_id]->access(f_lineaddr, is_write, core_id) )
+			return ICACHE_HIT_LATENCY;
+	} // On hit, just return the latency
+
+	// On L1 miss, get delay from shared L2 system. Read only (dirty flag set when installed below)
+	delay = memsys_L2_access_multicore(sys, f_lineaddr, false, core_id); // "GET" the data from L2 or DRAM
+
+	// L1 Cache(s) are allocate-on-miss. Install the line in the appropriate cache
+	Cache_Line victim = dcache_access ? sys->dcache_coreid[core_id]->install(f_lineaddr, is_write, core_id)
+	                                  : sys->icache_coreid[core_id]->install(f_lineaddr, is_write, core_id);
+
+	// Check for dirty evict and writeback to L2 if necessary
+	if ( victim.valid && victim.dirty ) {
+		memsys_L2_access_multicore(sys, victim.tag, true, core_id);
+	}
+
+	return delay + (dcache_access ? DCACHE_HIT_LATENCY : ICACHE_HIT_LATENCY);
 }
 
 uint64_t memsys_L2_access_multicore(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_t core_id) {
 
-	uint64_t delay = 0;
+	// uint64_t delay = 0;
 
-	// If there is a miss in the L1 Cache, access the L2Cache for the specific lineaddr.
+	// // Check for Hit in L2 cache
+	// if ( sys->l2cache->access(lineaddr, is_writeback, core_id) ) {
+	// 	return L2CACHE_HIT_LATENCY;
+	// } // On Hit, just return the hit latency
 
-	// If the L2Cache does not have the cache line, access the memory + install the new line + if needed, perform the writeback.
+	// // On L2 miss, access DRAM + install the new line + if needed, perform writeback
 
-	return delay;
+	// // Only get delay from DRAM on L2 read (no need on writeback to access memory)
+	// if ( !is_writeback ) {
+	// 	delay = sys->dram->access(lineaddr, false);
+	// }
+
+	// // L2 Cache is allocate-on-miss. Install the line (either from DRAM or L1) and evict if necessary
+	// Cache_Line victim = sys->l2cache->install(lineaddr, is_writeback, core_id);
+
+	// // Perform writeback to DRAM IF a dirty line was evicted
+	// if ( victim.valid && victim.dirty ) { // short circuit
+	// 	// victim tag is actually tag+index = lineaddr of the victim
+	// 	sys->dram->access(victim.tag, true); // Perform write to DRAM
+	// }
+
+	// // Miss delay is time to check for hit, plus however long lower layer took
+	// return delay + L2CACHE_HIT_LATENCY;
+	return memsys_L2_access(sys, lineaddr, is_writeback, core_id);
 }

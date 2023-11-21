@@ -44,8 +44,8 @@ uint64_t Dram::access(Addr lineaddr, bool is_dram_write) {
 			delay = 100;
 			break;
 		case SIM_MODE_C:
+		case SIM_MODE_D:
 		case SIM_MODE_E:
-		case SIM_MODE_F:
 			delay = this->access_mode_CDE(lineaddr, is_dram_write);
 			break;
 		default:
