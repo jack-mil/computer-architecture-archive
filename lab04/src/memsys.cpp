@@ -269,7 +269,7 @@ uint64_t memsys_L2_access(Memsys *sys, Addr lineaddr, bool is_writeback, uint32_
 	}
 
 	// L2 Cache is allocate-on-miss. Install the line (either from DRAM or L1) and evict if necessary
-	Cache_Line victim = sys->l2cache->install(lineaddr, is_writeback, core_id);
+	const Cache_Line &victim = sys->l2cache->install(lineaddr, is_writeback, core_id);
 
 	// Perform writeback to DRAM IF a dirty line was evicted
 	if ( victim.valid && victim.dirty ) { // short circuit
@@ -327,8 +327,8 @@ uint64_t memsys_access_modeDE(Memsys *sys, Addr v_lineaddr, Access_Type type, ui
 	delay = memsys_L2_access_multicore(sys, f_lineaddr, false, core_id); // "GET" the data from L2 or DRAM
 
 	// L1 Cache(s) are allocate-on-miss. Install the line in the appropriate cache
-	Cache_Line victim = dcache_access ? sys->dcache_coreid[core_id]->install(f_lineaddr, is_write, core_id)
-	                                  : sys->icache_coreid[core_id]->install(f_lineaddr, is_write, core_id);
+	const Cache_Line &victim = dcache_access ? sys->dcache_coreid[core_id]->install(f_lineaddr, is_write, core_id)
+	                                         : sys->icache_coreid[core_id]->install(f_lineaddr, is_write, core_id);
 
 	// Check for dirty evict and writeback to L2 if necessary
 	if ( victim.valid && victim.dirty ) {

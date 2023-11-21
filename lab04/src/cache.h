@@ -44,14 +44,11 @@ class Cache {
 	// Check for a hit at the specified line address
 	bool access(Addr lineaddr, bool is_write, uint32_t core_id);
 	// Insert a new cache line into this cache. Return the victim if it exists
-	Cache_Line install(Addr lineaddr, bool is_write, uint32_t core_id);
+	const Cache_Line &install(Addr lineaddr, bool is_write, uint32_t core_id);
 	// Print information about the accesses of this object. For grading
 	void print_stats(const char *header);
 	// Get a pointer to a cache initalized by size instead of using the Cache() ctor
-	static Cache* by_size(uint64_t size, uint64_t assoc, uint64_t line_size, uint64_t repl_policy);
-
-	// The last evicted cache block for writeback
-	Cache_Line last_evicted = {};
+	static Cache *by_size(uint64_t size, uint64_t assoc, uint64_t line_size, uint64_t repl_policy);
 
   private:
 	uint64_t m_stat_read_access{};  // Number of read (lookup accesses do not count as READ accesses) accesses made to the cache
@@ -61,6 +58,9 @@ class Cache {
 	uint64_t m_stat_evicts{};       // Count of requests to evict DIRTY lines.
 	uint64_t m_stat_dirty_evicts{}; // Count of requests to evict DIRTY lines.
 
+	// The last evicted cache block for writeback
+	Cache_Line m_last_evicted{};
+
 	uint16_t m_assoc;
 	uint16_t m_num_sets;
 	Repl_Policy m_repl_policy;
@@ -68,8 +68,10 @@ class Cache {
 	// A vector of sets, each with a DLL to represent cache ways.
 	std::vector<std::list<Cache_Line>> m_sets;
 
-	// Evicts a victim at index according to repl_policy. Return the evicted line
-	Cache_Line find_victim(uint32_t set_index, uint32_t core_id);
+	// Evicts a victim at index according to repl_policy. Sets m_last_evicted
+	void set_victim(std::list<Cache_Line> &set, uint32_t core_id);
+	void do_lfu_policy(std::list<Cache_Line> &ways);
+	void do_swp_policy(std::list<Cache_Line> &ways, uint32_t core_id);
 	// Static helper function for LFU+MRU policy
 	static bool comp_lfu(const Cache_Line &a, const Cache_Line &b);
 };
