@@ -89,10 +89,13 @@ const Cache_Line &Cache::install(Addr lineaddr, bool is_write, uint32_t core_id)
 	// Random access into the set for this index
 	auto &ways = m_sets.at(index);
 
-	// Conflict Miss. The ways are full
-	// Find a victim to evict
+	m_last_evicted.valid = false; // Default in case no eviction is needed
+	// indicates to memory system that no writeback check is needed
+
+	// Conflict Miss. The ways are full. Find a victim to evict
 	if ( ways.size() >= m_assoc ) {
-		this->set_victim(ways, core_id); // populates m_last_evicted
+		// guaranteed to populate m_last_evicted with a valid cache line
+		this->set_victim(ways, core_id);
 	}
 
 	ways.push_front({.tag = lineaddr, // Storing the whole tag+index here because it makes identifying victims for writeback easier
@@ -136,53 +139,72 @@ void Cache::set_victim(std::list<Cache_Line> &ways, uint32_t core_id) {
 	}
 }
 
-void Cache::do_lfu_policy(std::list<Cache_Line> &ways) {
-	auto iter = std::min_element(ways.cbegin(), ways.cend(), Cache::comp_lfu);
-	m_last_evicted = *iter; // Copy this element into member var
-	ways.erase(iter);       // This deallocates the element
-}
-
-void Cache::do_swp_policy(std::list<Cache_Line> &ways, uint32_t core_id) {
-
-	uint64_t SWP_CORE1_WAYS = m_assoc - SWP_CORE0_WAYS;
-
-	// count the number of lines matching this access core_id
-	uint count = std::count_if(ways.begin(), ways.end(),
-	                           [&](const Cache_Line &line) { return line.core_id == core_id; });
-
-	// this implementation only works for 2 cores (0,1)
-	uint filter = 0;
-	if ( count >= (core_id ? SWP_CORE1_WAYS : SWP_CORE0_WAYS) ) {
-		// Only select lines matching this core IF quota has been reached
-		filter = core_id;
-	} else {
-		// If this core deserves more space, evict from the other core's space
-		filter = core_id ? 1 : 0;
-	}
-
-	// Using a lambda again to capture environment (filter var)
-	auto it = std::min_element(ways.cbegin(), ways.cend(), [&](const Cache_Line &a, const Cache_Line &b) {
-		// Perform normal LFU+MRU if both elements match filter
-		if ( (a.core_id == filter) && (b.core_id == filter) )
-			return Cache::comp_lfu(a, b);
-
-		// Otherwise, prioritize element that matches filter
-		return (a.core_id == filter);
-
-		// Case when neither matches filter wont occur due to other logic
-	});
-
-	m_last_evicted = *it;
-	ways.erase(it);
-}
-
 // Given two lines a and b, return true if a is less frequently used than b
 // This could be an operator of Cache_Line. But that might be less readable
-bool Cache::comp_lfu(const Cache_Line &a, const Cache_Line &b) {
+inline bool Cache::comp_lfu(const Cache_Line &a, const Cache_Line &b) {
 	// In the case of a tie, the most recent (largest last_access_cycle) wins
 	if ( a.lfu_count == b.lfu_count ) {
 		return a.last_access_cycle > b.last_access_cycle;
 	}
 	// Otherwise, LFU wins
 	return (a.lfu_count < b.lfu_count);
+}
+
+// Find and evict a line according to LFU policy with MRU fallback
+// Searching requires looking at all elements despite list being ordered by MRU
+// Because all elements might have same (non-zero) lfu_count
+inline void Cache::do_lfu_policy(std::list<Cache_Line> &ways) {
+	auto iter = std::min_element(ways.cbegin(), ways.cend(), Cache::comp_lfu);
+	m_last_evicted = *iter; // Copy this element into member var
+	ways.erase(iter);       // This deallocates the element
+}
+
+// Find and evict a line, conforming to a static way partitioning between cores
+void Cache::do_swp_policy(std::list<Cache_Line> &ways, uint32_t core_id) {
+
+	// Cursed reference to external cmd line args. Maybe rework to be part of the Cache:: class
+	uint64_t SWP_CORE1_WAYS = m_assoc - SWP_CORE0_WAYS;
+
+	// Count the number of lines matching this access core_id
+	// Unfortunately this requires *another* search of O(N)
+	uint count = std::count_if(ways.begin(), ways.end(),
+	                           [&](const Cache_Line &line) { return line.core_id == core_id; });
+
+	// Only select lines matching this core IF quota has been reached
+	// If this core deserves more space, evict from the other core's space
+
+	// This check only works for 2 cores. Otherwise the rest is generic (I think...?)
+	bool over_quota = count >= (core_id == 0 ? SWP_CORE0_WAYS : SWP_CORE1_WAYS);
+
+	// Prepare two lambda functions that form closure of core_id local value.
+	// These two cases are used to filter elements of the list (ways)
+
+	// Filter to ONLY match elements with core_id
+	auto include = [&](const Cache_Line &a, const Cache_Line &b) {
+		// Perform normal LFU+MRU if both elements match core_id
+		if ( (a.core_id == core_id) && (b.core_id == core_id) )
+			return Cache::comp_lfu(a, b);
+
+		// Otherwise, prioritize element that matches core_id
+		return (a.core_id == core_id);
+		// Case when neither matches core_id wont occur due to other logic
+	};
+
+	// Filter to match ANY other core_id
+	auto exclude = [&](const Cache_Line &a, const Cache_Line &b) {
+		// Perform normal LFU+MRU if neither element matches core_id
+		if ( (a.core_id != core_id) && (b.core_id != core_id) )
+			return Cache::comp_lfu(a, b);
+
+		// Otherwise, prioritize element that matches core_id
+		return (a.core_id != core_id);
+		// Case when both match core_id wont occur due to other logic
+	};
+
+	// Either only pick a victim that matches this core_id, or that does NOT match
+	auto iter = over_quota ? std::min_element(ways.cbegin(), ways.cend(), include)
+	                       : std::min_element(ways.cbegin(), ways.cend(), exclude);
+
+	m_last_evicted = *iter;
+	ways.erase(iter);
 }
