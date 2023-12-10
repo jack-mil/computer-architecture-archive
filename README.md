@@ -10,5 +10,8 @@ Implement dependency tracking and forwarding for a 5-stage superscalar pipeline,
 Implement an Out of Order processor simulation. Evaluate performance using a ROB and RAT for register renaming (Tomasulo’s Algorithm). Also implement a small fully-associative data cache with LRU replacement policy.
 
 ## Lab 04
-Implement a mulilevel cache and DRAM system to model timing and performance. Also simulate multi-core shared cache access
+Implement a multilevel cache and DRAM system to model timing and performance. Also simulate multi-core shared cache access with writeback.
+Cache model includes multiple replacement policy options.
+
+
 Details of each assignment are in the respective pdf handouts.
