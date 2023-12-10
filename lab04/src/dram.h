@@ -16,6 +16,10 @@
 #define DRAM_BANKS 16
 #define ROW_BUFFER_SIZE 1024
 
+//---- Latency for Part B ------
+
+#define DRAM_LATENCY_FIXED  100
+
 // DRAM delay latencies (cycles)
 #define LATENCY_RAS 45 // (RAS) Row address strobe
 #define LATENCY_CAS 45 // Column Address Strobe

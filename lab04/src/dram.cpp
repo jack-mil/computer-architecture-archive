@@ -4,6 +4,8 @@
 
 #include "dram.h"
 
+
+
 // Cursed external references to sim.cpp (cmd line args)
 extern uint64_t CACHE_LINESIZE;
 extern MODE SIM_MODE;
@@ -41,7 +43,7 @@ uint64_t Dram::access(Addr lineaddr, bool is_dram_write) {
 	switch ( SIM_MODE ) {
 		case SIM_MODE_A:
 		case SIM_MODE_B:
-			delay = 100;
+			delay = DRAM_LATENCY_FIXED;
 			break;
 		case SIM_MODE_C:
 		case SIM_MODE_D:
