@@ -85,14 +85,15 @@ int cache_lookup(Cache *c, uint64_t addr, bool write) {
 		} else {
 			return MISS_LATENCY;
 		}
-	} else { // HIT condition
-		c->hits++;
-		// Move accessed item to head
-		updateLRU(c, tag, it);
-		if ( write ) {
-			return 1;
-		} else {
-			return HIT_LATENCY;
-		}
+	}
+	// HIT condition
+	c->hits++;
+	// Move accessed item to head
+	// updateLRU(c, tag, it);	// Replace this erase/reallocate with a splice() call (faster)
+	c->ways.splice(c->ways.begin(), c->ways, it);
+	if ( write ) {
+		return 1;
+	} else {
+		return HIT_LATENCY;
 	}
 }
