@@ -16,3 +16,12 @@ Implement an Out of Order processor simulation. Evaluate performance using a ROB
 ## Lab 04
 Implement a multilevel cache and DRAM system to model timing and performance. Also simulate multi-core shared cache access with writeback.
 Cache model includes multiple replacement policy options.
+
+# Copying
+```
+Copyright (c) 2023, jack-mil
+All rights reserved.
+
+The source code is available to view under Github's Terms of Service, but cannot be used or copied.
+```
+https://help.github.com/articles/github-terms-of-service
