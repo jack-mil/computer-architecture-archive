@@ -2,6 +2,8 @@
 
 Just my personal work for the C++ performance simulation assignments. Archived here for posterity.
 
+Original assignment pdfs have been removed from the repo.
+
 ## Lab 01
 Very basic starter assignment to test proficiency in C/C++ abilities. A simple program to analyze given benchmark instruction traces
 
